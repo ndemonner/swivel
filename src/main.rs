@@ -6,6 +6,7 @@
 // T-126 removes this attribute once M7 closes.
 #![allow(dead_code)]
 
+mod cli;
 mod config;
 mod error;
 mod logging;
@@ -46,6 +47,15 @@ enum Command {
     List,
     /// Remove a contact by slot or by name.
     Rm { who: String },
+    /// Approve a waiting contact.
+    Approve {
+        who: String,
+        /// Override the name they claim.
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Block an endpoint. It cannot connect or knock again.
+    Block { who: String },
     /// Move a contact to a different slot.
     Slot { who: String, slot: u8 },
     /// Check audio devices, permission, and connectivity.
@@ -80,11 +90,13 @@ fn run() -> Result<()> {
 
     match cli.command {
         None => todo!("T-070: run the menu bar application"),
-        Some(Command::Key { .. }) => todo!("T-100: print the ticket"),
-        Some(Command::Add { .. }) => todo!("T-101: add a contact"),
-        Some(Command::List) => todo!("T-101: list contacts"),
-        Some(Command::Rm { .. }) => todo!("T-101: remove a contact"),
-        Some(Command::Slot { .. }) => todo!("T-101: reassign a slot"),
+        Some(Command::Key { copy }) => cli::key(copy),
+        Some(Command::Add { ticket, name }) => cli::add(&ticket, name.as_deref()),
+        Some(Command::List) => cli::list(),
+        Some(Command::Rm { who }) => cli::remove(&who),
+        Some(Command::Slot { who, slot }) => cli::set_slot(&who, slot),
+        Some(Command::Approve { who, name }) => cli::approve(&who, name.as_deref()),
+        Some(Command::Block { who }) => cli::block(&who),
         Some(Command::Doctor { .. }) => todo!("T-102: check the local machine"),
         Some(Command::Tui) => todo!("T-105: headless mode"),
     }
