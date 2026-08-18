@@ -32,6 +32,7 @@ use crate::error::{Error, Result};
 use crate::net::audio_wire::{AudioPacket, FLAG_TALKSPURT_START, HEADER_LEN};
 
 use super::device::Chosen;
+use super::resample::Resampler;
 
 /// One encoded frame, ready for the network.
 #[derive(Clone, Copy)]
@@ -160,6 +161,18 @@ fn build_stream(
         .set_packet_loss_perc(OPUS_EXPECTED_LOSS)
         .map_err(Error::audio)?;
 
+    // The codec is always fed 48 kHz. A microphone that runs at another rate,
+    // which most Bluetooth headsets do, is converted first. Without this the
+    // encoder is handed the wrong number of samples per second and the far end
+    // hears a pitch shift.
+    let mut resampler = Resampler::new(config.sample_rate, SAMPLE_RATE);
+    if !resampler.is_passthrough() {
+        tracing::info!(
+            device_rate = config.sample_rate,
+            "the microphone does not run at 48 kHz, so the input is converted"
+        );
+    }
+
     // Everything the callback touches is allocated here, before the stream
     // starts. Nothing below this line allocates.
     let mut accumulator = vec![0f32; FRAME_SAMPLES];
@@ -180,9 +193,11 @@ fn build_stream(
                 let transmitting = callback_shared.transmitting.load(Ordering::Relaxed);
 
                 if !transmitting {
-                    // Closed microphone. Forget any partial frame so the next
-                    // talkspurt starts clean, and do no other work.
+                    // Closed microphone. Forget any partial frame and the
+                    // converter's history, so the next talkspurt starts clean
+                    // rather than with samples from before the pause.
                     filled = 0;
+                    resampler.reset();
                     was_transmitting = false;
                     callback_shared.peak_bits.store(0, Ordering::Relaxed);
                     callback_shared.speaking.store(false, Ordering::Relaxed);
@@ -191,15 +206,17 @@ fn build_stream(
 
                 let mut peak = 0f32;
 
-                for chunk in input.chunks(channels) {
-                    // Downmix. The wire format is mono, and a stereo microphone
-                    // carries no information a conversation needs.
-                    let mut sum = 0f32;
-                    for sample in chunk {
-                        sum += *sample;
-                    }
-                    let mono = sum / chunk.len() as f32;
+                // Downmix to mono as the samples are pulled. The wire format is
+                // mono, and a stereo microphone carries nothing a conversation
+                // needs.
+                let mut frames = input.chunks(channels);
+                let mut next_mono = || {
+                    let chunk = frames.next()?;
+                    let sum: f32 = chunk.iter().sum();
+                    Some(sum / chunk.len() as f32)
+                };
 
+                while let Some(mono) = resampler.next(&mut next_mono) {
                     let magnitude = mono.abs();
                     if magnitude > peak {
                         peak = magnitude;

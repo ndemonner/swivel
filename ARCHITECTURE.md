@@ -215,9 +215,25 @@ per second this is 64 kbit/s of payload per peer, per direction.
 
 ### 5.1 Format
 
-Everything runs at 48 kHz. There is no resampling in the hot path. If a device
-refuses 48 kHz, `walkie` opens it at its native rate and resamples with `rubato`
-outside the callback. This costs latency and is reported by `walkie doctor`.
+Everything between the codec and the wire runs at 48 kHz. Devices often do not.
+A Bluetooth headset commonly runs at 44.1 kHz, and that is the default for most
+people, not an edge case.
+
+A device at another rate is converted in `audio/resample.rs`, inside the
+callback, with a Catmull-Rom cubic. `rubato` would give better stopband
+rejection, but this converter has three properties that matter more:
+
+1. It allocates nothing, so it obeys §2.1.
+2. It costs a handful of multiplies per sample.
+3. It works one sample at a time, so it adds no block of latency.
+
+A device already at 48 kHz gets a passthrough and pays nothing. `walkie doctor`
+reports the rate either way.
+
+**This was a real defect, not a hypothetical.** Before the converter existed,
+playback on 44.1 kHz headphones ran at 44100/48000 of the correct speed. The
+symptom was subtle: audio worked, sounded almost right, and the `played` counter
+fell behind `sent` by a steady 8.2 percent. Nothing errored. See `JOURNAL.md`.
 
 Audio is mono on the wire. The capture path downmixes. The playback path copies
 mono to every output channel.

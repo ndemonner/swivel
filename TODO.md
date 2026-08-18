@@ -75,6 +75,9 @@ before you touch it.
 
 ## M3 — Audio
 
+- [x] **T-052** Sample rate conversion for devices that are not 48 kHz
+  - Found by measurement, not by design review. See JOURNAL.md.
+
 - [x] **T-040** Device enumeration, selection, and 48 kHz preference
   - Accept: a device without 48 kHz support is reported, not crashed on.
 - [x] **T-041** Input stream, downmix to mono, SPSC ring push

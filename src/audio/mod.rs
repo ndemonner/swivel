@@ -13,6 +13,7 @@ pub mod device;
 pub mod jitter;
 pub mod packet;
 pub mod playback;
+pub mod resample;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
