@@ -4,6 +4,7 @@
 //! store only. Presence needs the running application, so `list` reports the
 //! last time a contact was reachable, not whether they are online now.
 
+pub mod doctor;
 mod fmt;
 pub mod tui;
 

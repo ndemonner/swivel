@@ -46,15 +46,36 @@ pub const OPUS_COMPLEXITY: i32 = 8;
 /// The loss percentage the encoder assumes when it adds in-band FEC.
 pub const OPUS_EXPECTED_LOSS: i32 = 10;
 
-/// The largest Opus packet the decoder will accept. A 10 ms frame at 64 kbps is
-/// about 72 bytes. 1000 leaves room for a bitrate change.
-pub const MAX_PACKET_BYTES: usize = 1000;
+/// The largest Opus packet accepted, and the size of one queue slot.
+///
+/// A measured 10 ms mono frame at 64 kbps is 72 bytes. Even at 128 kbps it
+/// stays near 160. 400 gives more than twice the headroom and keeps the
+/// preallocated queues small: 400 x 32 packets x 8 peers is about 100 kB.
+pub const MAX_PACKET_BYTES: usize = 400;
 
 /// Capture ring capacity in samples. Four device buffers of headroom.
 pub const CAPTURE_RING_SAMPLES: usize = DEVICE_BUFFER_FRAMES as usize * 4;
 
 /// Encoded packets held per peer before the network side drops the oldest.
 pub const PEER_QUEUE_PACKETS: usize = 32;
+
+/// Per-peer playback gain. Eight peers summing at unity would clip, so each
+/// one is trimmed and a limiter catches the rest.
+pub const PEER_GAIN: f32 = 0.8;
+
+/// The level above which the output limiter starts to reduce gain.
+pub const LIMITER_THRESHOLD: f32 = 0.85;
+
+/// The highest level the limiter will ever produce.
+///
+/// It sits below full scale on purpose. A curve that reaches exactly 1.0 still
+/// clips once a device applies any gain of its own, and the saturating shape
+/// means a very loud input lands on the ceiling exactly.
+pub const LIMITER_CEILING: f32 = 0.98;
+
+/// Voice activity threshold, as a peak level in one frame. Above this the
+/// roster shows the speaker. It does not gate transmission.
+pub const SPEAKING_THRESHOLD: f32 = 0.02;
 
 // ---------------------------------------------------------------------------
 // Jitter buffer
@@ -71,6 +92,13 @@ pub const JITTER_MAX_FRAMES: usize = 6;
 
 /// How long the buffer must stay stable before it shrinks by one frame.
 pub const JITTER_SHRINK_AFTER: Duration = Duration::from_secs(5);
+
+/// Frames the buffer may hold above its target before it drops one.
+///
+/// Some slack matters. A network burst briefly deepens the buffer, and trimming
+/// on every burst throws away audio the user would have heard. Without any
+/// limit, though, one bad minute leaves the conversation permanently late.
+pub const JITTER_SLACK_FRAMES: usize = 2;
 
 /// Consecutive concealed frames before the output fades to silence.
 pub const CONCEAL_LIMIT: u32 = 5;
