@@ -1,0 +1,58 @@
+[package]
+name = "walkie"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+description = "Peer-to-peer low-latency voice intercom"
+license = "MIT"
+
+[[bin]]
+name = "walkie"
+path = "src/main.rs"
+
+[dependencies]
+# transport
+iroh = "1.0"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "io-util"] }
+bytes = "1"
+
+# audio
+cpal = "0.18"
+opus = "0.3"
+ringbuf = "0.5"
+
+# storage
+rusqlite = { version = "0.40", features = ["bundled"] }
+
+# serialisation
+serde = { version = "1", features = ["derive"] }
+postcard = { version = "1", features = ["alloc"] }
+data-encoding = "2"
+
+# plumbing
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+arc-swap = "1"
+crossbeam-channel = "0.5"
+rand = "0.9"
+clap = { version = "4", features = ["derive"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-app-kit = "0.3"
+global-hotkey = "0.8"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+# panic stays "unwind". An audio callback must never abort the process.
+panic = "unwind"
+
+[profile.dev]
+# The audio path is unusable at opt-level 0. Optimise dependencies in debug.
+[profile.dev.package."*"]
+opt-level = 2
