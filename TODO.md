@@ -38,18 +38,18 @@ before you touch it.
 
 ## M1 — Identity and storage
 
-- [ ] **T-010** SQLite open, path resolution, `0600` mode, `PRAGMA user_version`
+- [~] **T-010** SQLite open, path resolution, `0600` mode, `PRAGMA user_version` — branch task/010-storage
   - Accept: `WALKIE_DB` overrides the path. Needed for two-process tests.
-- [ ] **T-011** Migration 1: the four tables in ARCHITECTURE.md §8
-- [ ] **T-012** Identity load or create. Store the iroh `SecretKey`.
+- [~] **T-011** Migration 1: the four tables in ARCHITECTURE.md §8 — branch task/010-storage
+- [~] **T-012** Identity load or create. Store the iroh `SecretKey`. — branch task/010-storage
   - Accept: the same key survives a restart.
-- [ ] **T-013** `wt1` ticket encode and decode
+- [~] **T-013** `wt1` ticket encode and decode — branch task/010-storage
   - Accept: round trip test. Accept: a corrupt ticket gives a clear error.
-- [ ] **T-014** Contact CRUD and slot assignment
+- [~] **T-014** Contact CRUD and slot assignment — branch task/010-storage
   - Accept: a new contact takes the lowest free slot in 1..=9.
   - Accept: contact 10 and beyond gets `slot = NULL`.
   - Accept: slot reassignment swaps rather than fails.
-- [ ] **T-015** Knock table: record, approve, reject, block
+- [~] **T-015** Knock table: record, approve, reject, block — branch task/010-storage
 
 ## M2 — Network
 
