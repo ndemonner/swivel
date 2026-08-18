@@ -1,0 +1,16 @@
+# Cargo settings that every build on every machine needs.
+
+[env]
+# `audiopus_sys` compiles the vendored Opus source with CMake. That source
+# starts with `cmake_minimum_required(VERSION 3.1)`.
+#
+# CMake 4 removed compatibility with values below 3.5 and stops with an error.
+# The GitHub `macos-15` runner ships CMake 4, so the release build failed there
+# while it passed on a machine with CMake 3. This variable sets the policy floor
+# and lets the old file configure.
+#
+# CMake reads it from version 3.31. An older CMake ignores it, so this is safe
+# on a machine that does not need it.
+#
+# Remove this when `audiopus_sys` ships a source that declares 3.5 or later.
+CMAKE_POLICY_VERSION_MINIMUM = "3.5"
