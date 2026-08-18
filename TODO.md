@@ -112,26 +112,28 @@ before you touch it.
 
 ## M5 — User interface
 
-- [ ] **T-070** `NSApplication` accessory mode from a plain binary
+- [x] **T-070** `NSApplication` accessory mode from a plain binary
   - Accept: no Dock icon. Accept: it starts in under 500 ms.
-- [ ] **T-071** `NSStatusItem` with the five icon states from DESIGN.md §6.1
-- [ ] **T-072** Right-click menu: mute, DND, devices, copy key, quit
-- [ ] **T-073** `style.rs`: colour tokens, monospace font, 2 px border helper,
+- [x] **T-071** `NSStatusItem` with the five icon states from DESIGN.md §6.1
+- [x] **T-072** Right-click menu: mute, DND, devices, copy key, quit
+- [x] **T-073** `style.rs`: colour tokens, monospace font, 2 px border helper,
   stipple shadow helper, notched section label helper
-- [ ] **T-074** The floating `NSPanel`, positioned under the status item
-- [ ] **T-075** Custom roster view: slot box, name, presence dot, RTT, path type
-- [ ] **T-076** Live row inversion and the live session summary
-- [ ] **T-077** Search and add field with `wt1` paste detection
-- [ ] **T-078** Knock approval row with `a` and `x` keys
-- [ ] **T-079** `arc-swap` `UiState` snapshot and the 10 Hz redraw timer
+- [x] **T-074** The floating `NSPanel`, positioned under the status item
+- [x] **T-075** Custom roster view: slot box, name, presence dot, RTT, path type
+- [x] **T-076** Live row inversion and the live session summary
+- [x] **T-077** Search and add field with `wt1` paste detection
+- [x] **T-078** Knock approval row with `a` and `x` keys
+- [x] **T-079** `arc-swap` `UiState` snapshot and the 10 Hz redraw timer
 - [ ] **T-080** Main-thread wake for immediate transitions
+  - Note: the 10 Hz timer covers it for now. A session opening can lag by up
+    to 100 ms in the roster, which nobody has noticed yet.
 
 ## M6 — Hotkeys
 
-- [ ] **T-090** Register `⌃⌥⌘T`, `⌃⌥⌘Esc`, `⌃⌥⌘M` through `global-hotkey`
-- [ ] **T-091** Panel key window handling and digit capture in `keyDown:`
-- [ ] **T-092** Digit toggles a member in and out of the session
-- [ ] **T-093** `Esc` hides the panel and leaves the session live
+- [x] **T-090** Register `⌃⌥⌘T`, `⌃⌥⌘Esc`, `⌃⌥⌘M` through `global-hotkey`
+- [x] **T-091** Panel key window handling and digit capture in `keyDown:`
+- [x] **T-092** Digit toggles a member in and out of the session
+- [x] **T-093** `Esc` hides the panel and leaves the session live
 
 ## M7 — Command line
 
@@ -144,7 +146,7 @@ before you touch it.
 
 ## M8 — Packaging
 
-- [ ] **T-110** `build.rs` that embeds `Info.plist` through the linker
+- [x] **T-110** `build.rs` that embeds `Info.plist` through the linker
   - Accept: `otool -s __TEXT __info_plist` shows the plist in the binary.
 - [ ] **T-111** `scripts/build-release.sh` with ad-hoc `codesign`
 - [ ] **T-112** Release profile: `lto = "fat"`, `codegen-units = 1`, `panic` stays
@@ -153,6 +155,10 @@ before you touch it.
 - [ ] **T-114** Universal binary for Apple Silicon and Intel
 
 ## M9 — Verification
+
+- [ ] **T-127** Quit from the keyboard, for when the menu bar is unreachable
+  - Note: a menu bar manager can hide the icon, and then the only way out is
+    `pkill walkie`.
 
 - [ ] **T-120** Two-process integration test script
 - [ ] **T-121** Latency measurement harness and a recorded baseline

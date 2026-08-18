@@ -70,6 +70,10 @@ pub struct App {
 
     /// Requests for a new peer supervisor. See `supervise_one`.
     supervise_tx: tokio::sync::mpsc::UnboundedSender<EndpointId>,
+
+    /// When the microphone was last armed. A `std` lock, because `arm` is
+    /// called from the main thread and cannot await.
+    armed_at: std::sync::Mutex<Option<Instant>>,
 }
 
 impl App {
@@ -122,6 +126,7 @@ impl App {
             muted: Mutex::new(false),
             last_reported_voice: std::sync::atomic::AtomicBool::new(false),
             supervise_tx,
+            armed_at: std::sync::Mutex::new(None),
         });
 
         app.refresh_ui().await;
@@ -192,9 +197,15 @@ impl App {
         if let Some(engine) = &self.engine {
             engine.arm();
         }
+        *self.armed_at.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
     }
 
     /// Closes the microphone when no session is live.
+    ///
+    /// Arming opens the input device before a contact is chosen, so that the
+    /// first word of a talk session survives the device start. Every path that
+    /// arms must therefore have a path that disarms, or the microphone stays
+    /// open for the life of the process.
     pub async fn disarm_if_idle(&self) {
         if self.session.lock().await.is_some() {
             return;
@@ -202,6 +213,42 @@ impl App {
         if let Some(engine) = &self.engine {
             engine.disarm();
         }
+        *self.armed_at.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        self.refresh_ui().await;
+    }
+
+    /// Closes a microphone that was armed and then never used.
+    ///
+    /// The explicit paths cover the normal cases. This is the safety net for
+    /// the rest: a panel dismissed by clicking elsewhere, a shortcut pressed by
+    /// accident, a session that ended while the panel stayed open.
+    async fn disarm_if_stale(&self) {
+        let Some(engine) = &self.engine else {
+            return;
+        };
+        if !engine.armed() || engine.transmitting() {
+            return;
+        }
+        if self.session.lock().await.is_some() {
+            return;
+        }
+
+        let stale = {
+            let armed_at = self.armed_at.lock().unwrap_or_else(|e| e.into_inner());
+            armed_at.is_none_or(|at| at.elapsed() >= config::ARM_IDLE_TIMEOUT)
+        };
+
+        if stale {
+            debug!("closing a microphone that was armed but never used");
+            engine.disarm();
+            *self.armed_at.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            self.refresh_ui().await;
+        }
+    }
+
+    /// True while the input device is open.
+    pub fn mic_is_open(&self) -> bool {
+        self.engine.as_ref().is_some_and(|e| e.armed())
     }
 
     /// Adds or removes a contact by slot number. This is the digit press.
@@ -813,12 +860,14 @@ impl App {
         let dnd = *self.dnd.lock().await;
         let muted_locally = *self.muted.lock().await;
 
-        let mic = if live_members.is_empty() {
-            MicState::Closed
-        } else if muted_locally {
+        let mic = if !live_members.is_empty() && muted_locally {
             MicState::Muted
-        } else {
+        } else if !live_members.is_empty() {
             MicState::Live
+        } else if self.mic_is_open() {
+            MicState::Armed
+        } else {
+            MicState::Closed
         };
 
         let mut live_slots: Vec<u8> = peers
@@ -887,6 +936,9 @@ async fn watch_session(app: Arc<App>) {
         };
 
         let Some(idle) = idle else {
+            // No session. The microphone may still be armed from a panel that
+            // was opened and then dismissed.
+            app.disarm_if_stale().await;
             continue;
         };
 

@@ -117,6 +117,14 @@ pub const MAX_SLOT: u8 = 9;
 /// A session with no voice for this long closes itself.
 pub const SESSION_IDLE_TIMEOUT: Duration = Duration::from_secs(600);
 
+/// How long the microphone may stay open with no session before it is closed.
+///
+/// Opening the panel arms the microphone so the first word of a talk session
+/// survives the device start. If the user then walks away without talking to
+/// anyone, that open microphone must not stay open. This is the timer that
+/// closes it, and it is short on purpose.
+pub const ARM_IDLE_TIMEOUT: Duration = Duration::from_secs(8);
+
 // ---------------------------------------------------------------------------
 // Network
 // ---------------------------------------------------------------------------

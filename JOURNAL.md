@@ -120,3 +120,38 @@ Newest entries at the bottom. Keep entries short. Record surprises.
   for example `sleep 900 > /tmp/wa.in &`. Without it the first `echo` closes
   the pipe, standard input reaches end of file, and the instance shuts down.
 - Next: M5, the menu bar and the panel.
+
+## 2026-08-18 — M5 and M6. The menu bar interface.
+
+- Did: T-070..T-079, T-090..T-093, T-110. Menu bar item, floating panel,
+  hand-drawn roster, global shortcuts, and the embedded `Info.plist`.
+- **Surprise, and it cost an hour: `screencapture` from this environment
+  returns the desktop with every window missing.** The panel was drawing
+  correctly the whole time and the screenshots showed bare wallpaper, which
+  reads exactly like a window that failed to composite. The terminal lacks the
+  screen recording permission. The fix is `walkie snapshot`, which renders the
+  panel from inside the process to a PNG. Never trust `screencapture` here.
+- Learned: a window ordered front **before** `NSApplication::run` is never
+  composited. The debug panel now opens on the first timer tick instead.
+- Learned: `makeKeyAndOrderFront` does nothing when an accessory application is
+  not active. `orderFrontRegardless` is what actually shows the panel.
+- Bug found by the user: **the microphone stayed open permanently.** `arm` was
+  called when the panel opened and nothing ever disarmed. Two fixes. Arming now
+  lives inside `show_panel`, so every way of opening the panel arms and every
+  way of closing it disarms, in one place. And `disarm_if_stale` closes a
+  microphone that was armed but never used after 8 seconds. `MicState::Armed`
+  and the `((o))` icon make the state visible rather than silent.
+- Learned: `NSStatusItem` reports its button window at `y = -24` before the menu
+  bar lays it out, so the panel was placed off screen. Every placement is now
+  clamped to the visible frame, which also covers a user whose status item sits
+  in a hidden overflow area.
+- Learned: a status item gives one action for both mouse buttons. Reading
+  `NSApp.currentEvent()` inside the action tells them apart, and
+  `sendActionOn(LeftMouseUp | RightMouseUp)` is needed or a right click does
+  nothing. The menu is attached only for the instant it is shown, because
+  leaving it attached makes a left click open the menu.
+- Learned: a single-line `NSTextField` draws its text at the top of its frame.
+  The frame is sized to the text and centred in the box the roster draws.
+- Note: `pkill walkie` is the fallback when the menu bar icon is unreachable.
+  T-127 tracks a keyboard quit.
+- Next: M7 remaining commands, then M8 packaging.

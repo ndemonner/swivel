@@ -115,14 +115,22 @@ window. The icon shows the state:
 
 | State | Icon | Meaning |
 |---|---|---|
-| Idle | `((·))` outline | Running, microphone closed |
-| Live | `((3 5))` filled | Microphone open to slots 3 and 5 |
-| Receiving | `((·))` filled | A contact is speaking to you |
+| Idle | `((·))` | Running, microphone closed |
+| Armed | `((o))` | The microphone is open but nothing is sent |
+| Live | `((3 5))` | Microphone open to slots 3 and 5 |
+| Receiving | `((•))` | A contact is speaking to you |
 | Muted | `((/))` | Microphone forced off |
 | Do not disturb | `((x))` | Incoming sessions are refused |
+| Offline | `((~))` | No relay yet, so nobody can reach you |
 
-A left click opens the panel. A right click opens a menu with Mute, Do not
-disturb, Audio devices, Copy my key, and Quit.
+A left click opens the panel. A right click opens a menu with Open walkie,
+Mute, Do not disturb, End session, Copy my key, and Quit.
+
+The **armed** state matters. Opening the panel opens the microphone before you
+choose a contact, so that the first word of a talk session survives the device
+start. That is an open microphone, so it gets its own icon rather than hiding
+behind the idle one. It closes when the panel closes, and a timer closes it
+after 8 seconds in any case.
 
 ### 6.2 The panel
 
