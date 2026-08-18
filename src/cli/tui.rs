@@ -1,6 +1,6 @@
 //! Headless mode.
 //!
-//! `walkie tui` runs everything except the menu bar. Two instances on one
+//! `swivel tui` runs everything except the menu bar. Two instances on one
 //! machine prove that connection, presence, sessions, and audio work without
 //! the user interface in the way. See `LOOP.md` §5.
 //!
@@ -21,14 +21,14 @@ pub fn run() -> Result<()> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
-        .thread_name("walkie-net")
+        .thread_name("swivel-net")
         .build()?;
 
     runtime.block_on(async move {
         let app = App::start().await?;
 
         println!();
-        println!("{}", box_line::top("WALKIE", 68));
+        println!("{}", box_line::top("SWIVEL", 68));
         println!("  name  {}", app.identity.name);
         println!("  key   {}", app.my_ticket());
         println!("{}", box_line::bottom(68));
@@ -142,7 +142,7 @@ fn render(state: &UiState) -> String {
     if state.peers.is_empty() {
         let _ = writeln!(
             out,
-            "  no contacts. run `walkie add wt1…` in another shell."
+            "  no contacts. run `swivel add wt1…` in another shell."
         );
     } else {
         let mut table = Table::new(["", "SLOT", "NAME", "STATE", "RTT", "PATH"]);
@@ -171,7 +171,7 @@ fn render(state: &UiState) -> String {
     for knock in &state.knocks {
         let _ = writeln!(
             out,
-            "  waiting: {} {}   approve with `walkie approve {}`",
+            "  waiting: {} {}   approve with `swivel approve {}`",
             knock.claimed.as_deref().unwrap_or("(no name)"),
             knock.endpoint_id.fmt_short(),
             knock.endpoint_id.fmt_short(),

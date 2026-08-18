@@ -14,7 +14,7 @@ Short version:
 
 ## What this is
 
-`walkie` is a peer-to-peer, low-latency voice intercom for macOS. It is one CLI
+`swivel` is a peer-to-peer, low-latency voice intercom for macOS. It is one CLI
 binary that lives in the menu bar. It uses `iroh` for transport and Opus for
 audio. There are no accounts and no servers that hold state.
 
@@ -49,5 +49,5 @@ cargo run -- tui                             # headless, for two-process tests
 ./scripts/build-release.sh                   # signed release binary
 ```
 
-`WALKIE_DB` overrides the database path. Use it to run two instances at once.
-`WALKIE_LOG=debug` sets the log filter.
+`SWIVEL_DB` overrides the database path. Use it to run two instances at once.
+`SWIVEL_LOG=debug` sets the log filter.

@@ -150,7 +150,7 @@ fn pick_buffer_size(supported: &SupportedBufferSize) -> BufferSize {
             BufferSize::Fixed(DEVICE_BUFFER_FRAMES.clamp(*min, *max))
         }
         // Some backends will not say. Let the backend decide and report the
-        // unknown delay in `walkie doctor`.
+        // unknown delay in `swivel doctor`.
         _ => BufferSize::Default,
     }
 }
@@ -196,7 +196,7 @@ pub fn default_name(direction: Direction) -> Option<String> {
     device.description().ok().map(|d| d.name().to_string())
 }
 
-/// Lists every device, for `walkie doctor`.
+/// Lists every device, for `swivel doctor`.
 pub fn describe_all() -> Vec<(Direction, String, bool)> {
     let host = cpal::default_host();
     let mut out = Vec::new();

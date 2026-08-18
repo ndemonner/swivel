@@ -1,9 +1,9 @@
-# walkie — Product Design
+# swivel — Product Design
 
 ## 1. Summary
 
-`walkie` is a peer-to-peer voice intercom for small groups of friends. It gives
-you the feel of a walkie talkie or an open office door. You press a shortcut,
+`swivel` is a peer-to-peer voice intercom for small groups of friends. It gives
+you the feel of a swivel talkie or an open office door. You press a shortcut,
 you press a number, and you speak. The other person hears you immediately.
 
 There is no call. There is no ring. There is no hang up. There is no account.
@@ -37,10 +37,10 @@ Each install creates one Ed25519 keypair on first run. The public key is your
 `EndpointId`. Your shareable "key" is a **ticket**:
 
 ```
-wt1qy8ptc9m4x...   (base32, contains your endpoint id and your display name)
+sv1qy8ptc9m4x...   (base32, contains your endpoint id and your display name)
 ```
 
-Run `walkie key` to print the ticket. Run `walkie key --copy` to copy it.
+Run `swivel key` to print the ticket. Run `swivel key --copy` to copy it.
 You send the ticket to a friend over any channel. Signal, SMS, and a napkin all
 work.
 
@@ -49,10 +49,10 @@ work.
 Your friend runs:
 
 ```
-walkie add wt1qy8ptc9m4x...
+swivel add sv1qy8ptc9m4x...
 ```
 
-`walkie` stores the contact in a local SQLite database. It assigns the contact
+`swivel` stores the contact in a local SQLite database. It assigns the contact
 the lowest free slot number. It then dials the contact and keeps the connection
 warm.
 
@@ -65,7 +65,7 @@ Adding is one-sided. The other side must approve you.
 3. Your binary does not know that endpoint id. It records a **knock**.
 4. The menu bar icon shows a badge. The panel shows the knock.
 5. You press `a` to approve, or `x` to reject.
-6. On approval `walkie` assigns a slot and the link goes live.
+6. On approval `swivel` assigns a slot and the link goes live.
 
 A rejected endpoint id is blocked. It cannot knock again.
 
@@ -89,7 +89,7 @@ slot 9 are stored and shown, but you must select them in the panel.
 7. Press `⌃⌥⌘Esc` anywhere to end the session and close your microphone.
 
 The microphone opens on the digit press. There is no confirmation step. This is
-the walkie talkie behaviour the product is built around.
+the swivel talkie behaviour the product is built around.
 
 ### 5.2 Receiving
 
@@ -123,7 +123,7 @@ window. The icon shows the state:
 | Do not disturb | `((x))` | Incoming sessions are refused |
 | Offline | `((~))` | No relay yet, so nobody can reach you |
 
-A left click opens the panel. A right click opens a menu with Open walkie,
+A left click opens the panel. A right click opens a menu with Open swivel,
 Mute, Do not disturb, End session, Copy my key, and Quit.
 
 The **armed** state matters. It means the input device is open but nothing is
@@ -137,7 +137,7 @@ The panel is a floating, borderless `NSPanel`. It appears near the menu bar
 icon. It takes keyboard focus. It closes on `Esc` or on focus loss.
 
 ```
-┌─ WALKIE ─────────────────────────────────┐
+┌─ SWIVEL ─────────────────────────────────┐
 │                                          │
 │  ┌────────────────────────────────────┐  │
 │  │ search or paste key…               │  │
@@ -193,7 +193,7 @@ Rules:
 One text field does two jobs.
 
 1. Type letters to filter the roster.
-2. Paste a `wt1…` ticket and press `Return` to add a contact.
+2. Paste a `sv1…` ticket and press `Return` to add a contact.
 
 ## 7. Microphone safety
 
@@ -226,18 +226,18 @@ never opened would otherwise talk into nothing.
 
 ## 8. Command line
 
-The binary is `walkie`.
+The binary is `swivel`.
 
 | Command | Action |
 |---|---|
-| `walkie` | Run the application in the menu bar |
-| `walkie key` | Print your ticket |
-| `walkie add <ticket>` | Add a contact |
-| `walkie list` | List contacts, slots, and presence |
-| `walkie rm <slot|name>` | Remove a contact |
-| `walkie slot <name> <n>` | Reassign a slot |
-| `walkie doctor` | Check audio, permission, and connectivity |
-| `walkie tui` | Run without the menu bar, for headless debugging |
+| `swivel` | Run the application in the menu bar |
+| `swivel key` | Print your ticket |
+| `swivel add <ticket>` | Add a contact |
+| `swivel list` | List contacts, slots, and presence |
+| `swivel rm <slot|name>` | Remove a contact |
+| `swivel slot <name> <n>` | Reassign a slot |
+| `swivel doctor` | Check audio, permission, and connectivity |
+| `swivel tui` | Run without the menu bar, for headless debugging |
 
 ## 9. Non-goals
 

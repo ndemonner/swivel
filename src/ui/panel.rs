@@ -22,6 +22,35 @@ use crate::state::UiState;
 use super::roster_view::{Action, RosterView};
 use super::style;
 
+define_class!(
+    // SAFETY:
+    // - NSPanel has no subclassing requirement beyond the main thread.
+    // - KeyPanel does not implement Drop.
+    #[unsafe(super(NSPanel))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "SwivelPanel"]
+    #[ivars = ()]
+    struct KeyPanel;
+
+    impl KeyPanel {
+        /// A borderless window refuses key focus by default.
+        ///
+        /// Without this override the panel can be shown but never typed into:
+        /// digits go nowhere and the search field cannot be clicked into,
+        /// because an unfocusable window has no field editor.
+        #[unsafe(method(canBecomeKeyWindow))]
+        fn can_become_key_window(&self) -> bool {
+            true
+        }
+
+        /// The panel is the whole interface, so it is also the main window.
+        #[unsafe(method(canBecomeMainWindow))]
+        fn can_become_main_window(&self) -> bool {
+            true
+        }
+    }
+);
+
 /// Carries the field's Return key to a closure.
 pub struct FieldIvars {
     on_submit: Rc<dyn Fn()>,
@@ -33,7 +62,7 @@ define_class!(
     // - FieldTarget does not implement Drop.
     #[unsafe(super(NSObject))]
     #[thread_kind = MainThreadOnly]
-    #[name = "WalkieFieldTarget"]
+    #[name = "SwivelFieldTarget"]
     #[ivars = FieldIvars]
     struct FieldTarget;
 
@@ -86,14 +115,16 @@ impl Panel {
         // exists to take digits, so it is not used.
         let style_mask = NSWindowStyleMask::Borderless;
 
-        let window = {
-            NSPanel::initWithContentRect_styleMask_backing_defer(
-                NSPanel::alloc(mtm),
-                frame,
-                style_mask,
-                NSBackingStoreType::Buffered,
-                false,
-            )
+        let window: Retained<NSPanel> = unsafe {
+            let panel = KeyPanel::alloc(mtm).set_ivars(());
+            let panel: Retained<KeyPanel> = msg_send![
+                super(panel),
+                initWithContentRect: frame,
+                styleMask: style_mask,
+                backing: NSBackingStoreType::Buffered,
+                defer: false,
+            ];
+            Retained::cast_unchecked(panel)
         };
 
         {
@@ -123,7 +154,7 @@ impl Panel {
                 // Placed by `layout`, which knows the panel's current height.
                 NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(10.0, 10.0)),
             );
-            field.setPlaceholderString(Some(&NSString::from_str("search, or paste a wt1 key")));
+            field.setPlaceholderString(Some(&NSString::from_str("search, or paste a sv1 key")));
             field.setFont(Some(&style::mono(style::SIZE_BODY)));
             // AppKit's own bezel is a soft grey rounded rectangle. The roster
             // draws a 2 px square border behind the field instead, so the

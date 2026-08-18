@@ -28,7 +28,7 @@ impl Store {
     }
 
     /// Opens the database at an explicit path. Used by tests and by the
-    /// `WALKIE_DB` override, which lets two instances run on one machine.
+    /// `SWIVEL_DB` override, which lets two instances run on one machine.
     pub fn open_at(path: PathBuf) -> Result<Self> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).map_err(|source| Error::CreateDir {
@@ -76,7 +76,7 @@ impl Store {
         if current > SCHEMA_VERSION {
             return Err(Error::Other(anyhow::anyhow!(
                 "the database is version {current} but this build only knows \
-                 version {SCHEMA_VERSION}. Use a newer walkie."
+                 version {SCHEMA_VERSION}. Use a newer swivel."
             )));
         }
 
@@ -122,9 +122,9 @@ CREATE TABLE settings (
 );
 "#;
 
-/// Returns the database path, honouring the `WALKIE_DB` override.
+/// Returns the database path, honouring the `SWIVEL_DB` override.
 pub fn default_path() -> Result<PathBuf> {
-    if let Ok(p) = std::env::var("WALKIE_DB") {
+    if let Ok(p) = std::env::var("SWIVEL_DB") {
         return Ok(PathBuf::from(p));
     }
 
@@ -132,9 +132,58 @@ pub fn default_path() -> Result<PathBuf> {
     let mut path = PathBuf::from(home);
     path.push("Library");
     path.push("Application Support");
-    path.push("dev.motor.walkie");
-    path.push("walkie.db");
+    path.push("dev.motor.swivel");
+    path.push("swivel.db");
+
+    // The product was called `walkie` until 2026-08-18. Carry an existing
+    // identity across rather than silently handing the user a new key and
+    // breaking any key they already shared.
+    //
+    // T-131 removes this once nobody is on the old name.
+    if !path.exists() {
+        adopt_former_name(&path);
+    }
+
     Ok(path)
+}
+
+/// Moves a database left behind by the former name, if there is one.
+///
+/// Every failure here is ignored on purpose. The worst outcome is a new
+/// identity, and refusing to start would be worse than that.
+fn adopt_former_name(new_path: &std::path::Path) {
+    let Some(home) = std::env::var_os("HOME") else {
+        return;
+    };
+
+    let mut old = PathBuf::from(home);
+    old.push("Library");
+    old.push("Application Support");
+    old.push("dev.motor.walkie");
+    let old_db = old.join("walkie.db");
+
+    if !old_db.exists() {
+        return;
+    }
+    let Some(parent) = new_path.parent() else {
+        return;
+    };
+    if std::fs::create_dir_all(parent).is_err() {
+        return;
+    }
+
+    // The write-ahead log and its index have to travel with the database, or
+    // SQLite sees a torn state.
+    for suffix in ["", "-wal", "-shm"] {
+        let from = old.join(format!("walkie.db{suffix}"));
+        let to = parent.join(format!("swivel.db{suffix}"));
+        if from.exists() {
+            let _ = std::fs::rename(&from, &to);
+        }
+    }
+
+    let _ = std::fs::remove_dir(&old);
+    tracing::info!("carried your identity over from the former name");
 }
 
 /// Sets mode `0600` on the database file.
@@ -231,11 +280,11 @@ mod tests {
     #[test]
     fn env_override_wins() {
         // SAFETY: single-threaded test, and the variable is read immediately.
-        unsafe { std::env::set_var("WALKIE_DB", "/tmp/walkie-test-override.db") };
+        unsafe { std::env::set_var("SWIVEL_DB", "/tmp/swivel-test-override.db") };
         assert_eq!(
             default_path().unwrap(),
-            PathBuf::from("/tmp/walkie-test-override.db")
+            PathBuf::from("/tmp/swivel-test-override.db")
         );
-        unsafe { std::env::remove_var("WALKIE_DB") };
+        unsafe { std::env::remove_var("SWIVEL_DB") };
     }
 }

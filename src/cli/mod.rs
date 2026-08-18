@@ -13,7 +13,7 @@ use crate::store::{Store, identity, ticket::Ticket};
 
 use fmt::{Table, box_line, relative_time};
 
-/// `walkie key`
+/// `swivel key`
 pub fn key(copy: bool) -> Result<()> {
     let store = Store::open()?;
     let me = store.identity(&identity::default_name())?;
@@ -33,7 +33,7 @@ pub fn key(copy: bool) -> Result<()> {
     println!("  Send this to a friend. They run:");
     // Never print a shortened key here. A reader will copy whatever looks like
     // a key, and a shortened one fails with a confusing message.
-    println!("      walkie add <the key above>");
+    println!("      swivel add <the key above>");
     println!();
     println!("  It carries your public key and the name {:?}.", me.name);
     println!("  It carries no secret.");
@@ -41,7 +41,7 @@ pub fn key(copy: bool) -> Result<()> {
     Ok(())
 }
 
-/// `walkie add <ticket>`
+/// `swivel add <ticket>`
 pub fn add(ticket_text: &str, name_override: Option<&str>) -> Result<()> {
     let store = Store::open()?;
     let me = store.identity(&identity::default_name())?;
@@ -69,20 +69,20 @@ pub fn add(ticket_text: &str, name_override: Option<&str>) -> Result<()> {
             println!("  {verb} {}", contact.name);
             println!();
             println!("  Slots 1 to 9 are taken, so this contact has no number.");
-            println!("  Use `walkie slot {} <n>` to give them one.", contact.name);
+            println!("  Use `swivel slot {} <n>` to give them one.", contact.name);
             println!();
         }
     }
 
     if !existed {
         println!("  They must approve you before audio flows. Send them your key:");
-        println!("      walkie key");
+        println!("      swivel key");
         println!();
     }
     Ok(())
 }
 
-/// `walkie list`
+/// `swivel list`
 pub fn list() -> Result<()> {
     let store = Store::open()?;
     let contacts = store.contacts()?;
@@ -92,8 +92,8 @@ pub fn list() -> Result<()> {
         println!();
         println!("  No contacts yet.");
         println!();
-        println!("  Send your key to a friend:   walkie key");
-        println!("  Add theirs:                  walkie add wt1…");
+        println!("  Send your key to a friend:   swivel key");
+        println!("  Add theirs:                  swivel add sv1…");
         println!();
         return Ok(());
     }
@@ -135,14 +135,14 @@ pub fn list() -> Result<()> {
         }
         table.print("  ");
         println!();
-        println!("  Approve one with:  walkie approve <key>");
+        println!("  Approve one with:  swivel approve <key>");
         println!();
     }
 
     Ok(())
 }
 
-/// `walkie rm <who>`
+/// `swivel rm <who>`
 pub fn remove(who: &str) -> Result<()> {
     let store = Store::open()?;
     let contact = store.find_contact(who)?;
@@ -157,7 +157,7 @@ pub fn remove(who: &str) -> Result<()> {
     Ok(())
 }
 
-/// `walkie slot <who> <n>`
+/// `swivel slot <who> <n>`
 pub fn set_slot(who: &str, slot: u8) -> Result<()> {
     let store = Store::open()?;
     let contact = store.find_contact(who)?;
@@ -180,7 +180,7 @@ pub fn set_slot(who: &str, slot: u8) -> Result<()> {
     Ok(())
 }
 
-/// `walkie devices`
+/// `swivel devices`
 pub fn devices(input: Option<&str>, output: Option<&str>, reset: bool) -> Result<()> {
     use crate::audio::device::{self, Direction};
     use crate::store::{SETTING_INPUT_DEVICE, SETTING_OUTPUT_DEVICE};
@@ -211,7 +211,7 @@ pub fn devices(input: Option<&str>, output: Option<&str>, reset: bool) -> Result
     }
 
     if changed {
-        println!("\n  Restart walkie, or it applies on the next conversation.\n");
+        println!("\n  Restart swivel, or it applies on the next conversation.\n");
         return Ok(());
     }
 
@@ -260,8 +260,8 @@ pub fn devices(input: Option<&str>, output: Option<&str>, reset: bool) -> Result
 
     println!();
     println!("  Choose one by number or by name:");
-    println!("      walkie devices --in 2 --out \"External Headphones\"");
-    println!("      walkie devices --reset");
+    println!("      swivel devices --in 2 --out \"External Headphones\"");
+    println!("      swivel devices --reset");
     println!();
     Ok(())
 }
@@ -288,7 +288,7 @@ fn resolve_device(wanted: &str, available: &[String]) -> Result<String> {
     match matches.len() {
         1 => Ok(matches[0].clone()),
         0 => Err(Error::Audio(format!(
-            "no device matches {wanted:?}. Run `walkie devices` to list them."
+            "no device matches {wanted:?}. Run `swivel devices` to list them."
         ))),
         _ => Err(Error::Audio(format!(
             "{wanted:?} matches {} devices: {}",
@@ -302,7 +302,7 @@ fn resolve_device(wanted: &str, available: &[String]) -> Result<String> {
     }
 }
 
-/// `walkie approve <key>`
+/// `swivel approve <key>`
 pub fn approve(who: &str, name: Option<&str>) -> Result<()> {
     let store = Store::open()?;
     let knocks = store.pending_knocks()?;
@@ -332,7 +332,7 @@ pub fn approve(who: &str, name: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-/// `walkie block <key>`
+/// `swivel block <key>`
 pub fn block(who: &str) -> Result<()> {
     let store = Store::open()?;
 

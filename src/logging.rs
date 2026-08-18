@@ -6,11 +6,11 @@
 
 use tracing_subscriber::{EnvFilter, fmt};
 
-/// Starts logging to stderr. `WALKIE_LOG` sets the filter, for example
-/// `WALKIE_LOG=walkie=debug,iroh=info`.
+/// Starts logging to stderr. `SWIVEL_LOG` sets the filter, for example
+/// `SWIVEL_LOG=swivel=debug,iroh=info`.
 pub fn init() {
-    let filter = EnvFilter::try_from_env("WALKIE_LOG")
-        .unwrap_or_else(|_| EnvFilter::new("walkie=info,warn"));
+    let filter = EnvFilter::try_from_env("SWIVEL_LOG")
+        .unwrap_or_else(|_| EnvFilter::new("swivel=info,warn"));
 
     fmt()
         .with_env_filter(filter)

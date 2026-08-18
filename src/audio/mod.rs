@@ -60,7 +60,7 @@ pub trait AudioTx: Send + Sync {
     fn send_frame(&self, wire: &[u8]) -> usize;
 }
 
-/// An audio sink that drops everything. Used by tests and by `walkie doctor`.
+/// An audio sink that drops everything. Used by tests and by `swivel doctor`.
 #[derive(Debug, Default)]
 pub struct NullSink;
 
@@ -138,7 +138,7 @@ pub struct Engine {
     estimators: Arc<std::sync::Mutex<Vec<Estimator>>>,
     capture: Arc<capture::CaptureShared>,
     chirps: Arc<ChirpPlayer>,
-    /// The report from the last device open. Used by `walkie doctor`.
+    /// The report from the last device open. Used by `swivel doctor`.
     pub report: Arc<std::sync::Mutex<Option<DeviceReport>>>,
     state: Arc<std::sync::atomic::AtomicU8>,
     /// True while the input device is open, whether or not it is transmitting.
@@ -200,7 +200,7 @@ impl Engine {
             let slots = slots.clone();
 
             std::thread::Builder::new()
-                .name("walkie-audio".into())
+                .name("swivel-audio".into())
                 .spawn(move || {
                     audio_thread(
                         rx,
@@ -318,7 +318,7 @@ impl Engine {
             .unwrap_or_default()
     }
 
-    /// Counters for `walkie doctor`.
+    /// Counters for `swivel doctor`.
     pub fn stats(&self) -> Stats {
         let mut played = 0;
         let mut concealed = 0;
@@ -475,7 +475,7 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
     );
 
     if speaker.is_none() {
-        warn!("walkie is running without audio output. Run `walkie doctor`.");
+        warn!("swivel is running without audio output. Run `swivel doctor`.");
     }
 
     let mut microphone: Option<OpenMicrophone> = None;
@@ -674,7 +674,7 @@ fn open_microphone(
     let sender = {
         let running = sender_running.clone();
         std::thread::Builder::new()
-            .name("walkie-audio-tx".into())
+            .name("swivel-audio-tx".into())
             .spawn(move || capture::sender_loop(frames, tx, running))
             .map_err(|e| Error::Audio(format!("cannot start the sender thread: {e}")))?
     };

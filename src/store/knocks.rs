@@ -1,7 +1,7 @@
 //! Knocks.
 //!
 //! A knock is a connection attempt from an endpoint you have not approved.
-//! `walkie` records it, refuses the connection, and shows it in the roster.
+//! `swivel` records it, refuses the connection, and shows it in the roster.
 //! See `DESIGN.md` §4.3.
 
 use iroh::EndpointId;

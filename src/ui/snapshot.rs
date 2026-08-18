@@ -1,6 +1,6 @@
 //! Rendering the interface to a file.
 //!
-//! `walkie snapshot` draws the panel into a PNG and exits. It exists for two
+//! `swivel snapshot` draws the panel into a PNG and exits. It exists for two
 //! reasons.
 //!
 //! A terminal without the screen recording permission captures the desktop with
@@ -77,8 +77,10 @@ fn real_state() -> Result<UiState> {
     let my_id = me.endpoint_id();
 
     Ok(UiState {
-        my_name: me.name,
+        my_name: me.name.clone(),
         my_id: Some(my_id),
+        my_key: crate::store::ticket::Ticket::new(my_id, &me.name).encode(),
+        key_copied: false,
         online: false,
         peers,
         ..Default::default()
@@ -141,6 +143,8 @@ fn demo_state(live: bool) -> UiState {
     UiState {
         my_name: "nick".into(),
         my_id: Some(id(9)),
+        my_key: crate::store::ticket::Ticket::new(id(9), "nick").encode(),
+        key_copied: false,
         online: true,
         peers,
         knocks: vec![KnockView {

@@ -1,4 +1,4 @@
-# walkie
+# swivel
 
 A peer-to-peer voice intercom for people who talk to the same few friends every
 day.
@@ -20,13 +20,13 @@ network round trip. On a LAN that is about 42 ms, mouth to ear.
 ## Two minute start
 
 ```bash
-./walkie doctor        # check audio, permission, and connectivity
-./walkie key           # print your key, and send it to a friend
-./walkie add wt1…      # add theirs
-./walkie               # run it, and look in the menu bar
+./swivel doctor        # check audio, permission, and connectivity
+./swivel key           # print your key, and send it to a friend
+./swivel add sv1…      # add theirs
+./swivel               # run it, and look in the menu bar
 ```
 
-Your friend runs `walkie approve <key>` once, and the link goes live.
+Your friend runs `swivel approve <key>` once, and the link goes live.
 
 **Wear headphones.** Version 1 has no echo canceller, so on speakers the other
 person hears themselves.
@@ -62,21 +62,21 @@ never opened just to look at the roster. The menu bar icon always says which:
 
 | Command | What it does |
 |---|---|
-| `walkie` | Run it in the menu bar |
-| `walkie key [--copy]` | Print your key |
-| `walkie add <key> [--name N]` | Add a contact |
-| `walkie list` | Contacts, slots, and who is waiting |
-| `walkie approve <key>` | Let someone in |
-| `walkie block <key>` | Keep someone out |
-| `walkie slot <who> <n>` | Move a contact to another number |
-| `walkie rm <who>` | Remove a contact |
-| `walkie devices` | List audio devices, or choose one |
-| `walkie doctor` | Check this machine |
-| `walkie tui` | Run without the menu bar |
-| `walkie snapshot --demo` | Draw the interface to a PNG |
+| `swivel` | Run it in the menu bar |
+| `swivel key [--copy]` | Print your key |
+| `swivel add <key> [--name N]` | Add a contact |
+| `swivel list` | Contacts, slots, and who is waiting |
+| `swivel approve <key>` | Let someone in |
+| `swivel block <key>` | Keep someone out |
+| `swivel slot <who> <n>` | Move a contact to another number |
+| `swivel rm <who>` | Remove a contact |
+| `swivel devices` | List audio devices, or choose one |
+| `swivel doctor` | Check this machine |
+| `swivel tui` | Run without the menu bar |
+| `swivel snapshot --demo` | Draw the interface to a PNG |
 
 `⌃⌥⌘T` opens the roster. A left click on the icon does the same. A right click
-opens the menu, which has Quit in it. `pkill walkie` also works.
+opens the menu, which has Quit in it. `pkill swivel` also works.
 
 ## Building
 

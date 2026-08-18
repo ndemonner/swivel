@@ -1,4 +1,4 @@
-# walkie — Architecture
+# swivel — Architecture
 
 This document describes how the binary is built. Read DESIGN.md first.
 
@@ -97,7 +97,7 @@ src/
     contacts.rs     contact CRUD, slot assignment
   net/
     mod.rs          endpoint build, accept loop
-    ticket.rs       wt1 ticket encode and decode
+    ticket.rs       sv1 ticket encode and decode
     peer.rs         per-contact supervisor and reconnect
     control.rs      control stream protocol
     audio_wire.rs   audio datagram header
@@ -134,7 +134,7 @@ let ep = Endpoint::builder(presets::N0)
     .await?;
 ```
 
-`ALPN` is `b"walkie/0"`.
+`ALPN` is `b"swivel/0"`.
 
 ### 4.2 Transport tuning
 
@@ -227,7 +227,7 @@ rejection, but this converter has three properties that matter more:
 2. It costs a handful of multiplies per sample.
 3. It works one sample at a time, so it adds no block of latency.
 
-A device already at 48 kHz gets a passthrough and pays nothing. `walkie doctor`
+A device already at 48 kHz gets a passthrough and pays nothing. `swivel doctor`
 reports the rate either way.
 
 **This was a real defect, not a hypothetical.** Before the converter existed,
@@ -310,7 +310,7 @@ Missing packets are handled in this order:
 
 Version 1 assumes headphones. There is no acoustic echo canceller.
 
-If the output device is a speaker, `walkie doctor` prints a warning. A future
+If the output device is a speaker, `swivel doctor` prints a warning. A future
 version may add `webrtc-audio-processing`. That is tracked in TODO.md. It is not
 in scope for version 1 because AEC3 adds buffering and build complexity.
 
@@ -390,7 +390,7 @@ Measured components, at the default settings, on the test machine.
 Add the one-way network time. A LAN adds about 1 ms. A same-city path adds about
 8 ms. A US coast-to-coast direct path adds about 35 ms.
 
-A relayed path adds the trip to the relay and back. `walkie` shows `RLY` in the
+A relayed path adds the trip to the relay and back. `swivel` shows `RLY` in the
 roster when this happens, because it is the single biggest latency risk.
 
 ### 7.1 Reducing the budget
@@ -402,11 +402,11 @@ The following are configurable. Each trades safety for latency.
    lowers codec efficiency.
 3. `jitter_min = 1` saves 10 ms. It only works on a stable LAN.
 
-`walkie doctor --tune` measures the link and suggests values.
+`swivel doctor --tune` measures the link and suggests values.
 
 ## 8. Storage
 
-SQLite lives at `~/Library/Application Support/dev.motor.walkie/walkie.db`. The
+SQLite lives at `~/Library/Application Support/dev.motor.swivel/swivel.db`. The
 file mode is `0600`.
 
 ```sql
@@ -499,9 +499,9 @@ other applications.
 
 1. **Unit.** Ticket round trip, slot assignment, jitter buffer decisions, wire
    header encode and decode. These run in CI without hardware.
-2. **Loopback latency.** `walkie doctor --loopback` plays a click, records it,
+2. **Loopback latency.** `swivel doctor --loopback` plays a click, records it,
    and measures the round trip through the real device stack.
-3. **Two-process local.** `WALKIE_DB=/tmp/a.db walkie` and a second instance
+3. **Two-process local.** `SWIVEL_DB=/tmp/a.db swivel` and a second instance
    with a different database. They connect over the loopback path. This is the
    main integration test.
 4. **Network shaping.** Use `dnctl` and `pfctl` to add delay and loss. Confirm

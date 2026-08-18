@@ -26,7 +26,7 @@ Newest entries at the bottom. Keep entries short. Record surprises.
 - Did: T-001..T-004 skeleton, T-010..T-015 storage, T-020..T-030 network,
   T-100, T-101 contact commands, T-105 headless mode.
 - Did: took the command line ahead of its milestone. The store was untestable
-  by hand without it, and `walkie tui` is the only way to test two peers.
+  by hand without it, and `swivel tui` is the only way to test two peers.
 - Learned: two instances connect, hole punch, and settle on a direct path with
   0 ms round trip on loopback. iroh's relay fallback works and the roster
   reports `RLY` until the direct path takes over. That transition is visible
@@ -55,7 +55,7 @@ Newest entries at the bottom. Keep entries short. Record surprises.
 ## 2026-08-18 — M3 audio engine
 
 - Did: T-040..T-047, T-029, T-102. Capture, encode, jitter buffer, decode, mix,
-  limiter, fault tone, and `walkie doctor`.
+  limiter, fault tone, and `swivel doctor`.
 - Measured on this machine: Opus encode is **0.05 ms** per 10 ms frame at
   complexity 8, against a 10 ms budget. The packet is 81 bytes. The fixed
   latency total is **41.1 ms**, which matches ARCHITECTURE.md §7 exactly.
@@ -116,7 +116,7 @@ Newest entries at the bottom. Keep entries short. Record surprises.
   `ArcSwap`, so reading them is a pointer swap with no lock.
 - Added: a `played` counter. Every other counter reports a failure, and absence
   of failure is not proof that audio arrived. `played` is the positive signal.
-- Testing note: driving `walkie tui` through a fifo needs a writer held open,
+- Testing note: driving `swivel tui` through a fifo needs a writer held open,
   for example `sleep 900 > /tmp/wa.in &`. Without it the first `echo` closes
   the pipe, standard input reaches end of file, and the instance shuts down.
 - Next: M5, the menu bar and the panel.
@@ -129,7 +129,7 @@ Newest entries at the bottom. Keep entries short. Record surprises.
   returns the desktop with every window missing.** The panel was drawing
   correctly the whole time and the screenshots showed bare wallpaper, which
   reads exactly like a window that failed to composite. The terminal lacks the
-  screen recording permission. The fix is `walkie snapshot`, which renders the
+  screen recording permission. The fix is `swivel snapshot`, which renders the
   panel from inside the process to a PNG. Never trust `screencapture` here.
 - Learned: a window ordered front **before** `NSApplication::run` is never
   composited. The debug panel now opens on the first timer tick instead.
@@ -152,7 +152,7 @@ Newest entries at the bottom. Keep entries short. Record surprises.
   leaving it attached makes a left click open the menu.
 - Learned: a single-line `NSTextField` draws its text at the top of its frame.
   The frame is sized to the text and centred in the box the roster draws.
-- Note: `pkill walkie` is the fallback when the menu bar icon is unreachable.
+- Note: `pkill swivel` is the fallback when the menu bar icon is unreachable.
   T-127 tracks a keyboard quit.
 - Next: M7 remaining commands, then M8 packaging.
 
@@ -168,7 +168,7 @@ Newest entries at the bottom. Keep entries short. Record surprises.
   apart showed the gap **growing** at a constant rate, and a constant ratio is
   never a startup cost. 0.918 is 44100/48000.
 - Root cause: `device::choose` correctly reported `native_rate = false` for a
-  44.1 kHz device, and `walkie doctor` correctly printed a fault about it. The
+  44.1 kHz device, and `swivel doctor` correctly printed a fault about it. The
   code then did nothing with that fact and fed 48 kHz audio to the device
   anyway. `ARCHITECTURE.md` claimed the pipeline resampled with `rubato`. It
   did not. **A document is not an implementation.**

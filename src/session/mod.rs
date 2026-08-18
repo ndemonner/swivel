@@ -82,7 +82,7 @@ impl Session {
 pub struct SessionTx {
     targets: ArcSwap<Vec<Connection>>,
     /// Datagrams the transport refused, almost always because its small send
-    /// buffer was full. Reported by `walkie doctor`.
+    /// buffer was full. Reported by `swivel doctor`.
     pub refused: std::sync::atomic::AtomicU64,
     pub sent: std::sync::atomic::AtomicU64,
 }

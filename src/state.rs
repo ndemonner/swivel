@@ -83,6 +83,11 @@ pub enum MicState {
 pub struct UiState {
     pub my_name: String,
     pub my_id: Option<EndpointId>,
+    /// Your shareable key, ready to show. The interface must never tell a user
+    /// to run a command to read a value the application already holds.
+    pub my_key: String,
+    /// Set for a moment after the key is copied, so the interface can say so.
+    pub key_copied: bool,
     /// False until the endpoint reaches a relay. Nothing can connect before it.
     pub online: bool,
     pub peers: Vec<PeerView>,
