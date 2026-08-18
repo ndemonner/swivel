@@ -249,7 +249,7 @@ The following are out of scope for version 1.
 4. Windows and Linux user interfaces. The core is portable. The interface is not.
 5. Groups larger than 8.
 6. Any server that holds user state. Relays forward packets only.
-7. Acoustic echo cancellation. Version 1 assumes headphones. See TODO.md.
+7. Echo cancellation on Windows and Linux. The macOS one uses an Apple unit.
 
 ## 10. Success criteria
 

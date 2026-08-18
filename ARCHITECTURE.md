@@ -308,11 +308,50 @@ Missing packets are handled in this order:
 
 ### 5.5 Echo
 
-Version 1 assumes headphones. There is no acoustic echo canceller.
+Echo cancellation uses **Apple's Voice Processing unit**,
+`kAudioUnitSubType_VoiceProcessingIO`. It is the same acoustic echo canceller,
+noise suppressor, and gain control that FaceTime uses. It is better than
+anything reasonable to write here, and it costs no dependency.
 
-If the output device is a speaker, `swivel doctor` prints a warning. A future
-version may add `webrtc-audio-processing`. That is tracked in TODO.md. It is not
-in scope for version 1 because AEC3 adds buffering and build complexity.
+This decides the shape of the audio path, so it is worth stating plainly.
+
+An echo canceller needs the signal that went to the speaker in order to subtract
+it from what the microphone hears. The Voice Processing unit is therefore **one
+unit that owns both directions**. While it runs, the `cpal` streams in
+`capture.rs` and `playback.rs` are not used at all.
+
+The audio path is therefore in one of two shapes:
+
+| Shape | What is open | When |
+|---|---|---|
+| Listening | A `cpal` output stream | No conversation |
+| Talking | One Voice Processing unit, both directions | In a conversation |
+
+Whether the input element is enabled is fixed when the unit is initialised, so
+the unit cannot be left running with the microphone off. It is built when a
+conversation starts and destroyed when one ends, which is also exactly what
+§6.2 requires.
+
+Switching shape replaces the whole audio path. The output callback owns the read
+side of every packet queue, so a new path needs a new `SlotTable`. `Engine::arm`
+and `Engine::disarm` install the new table on the calling thread **before**
+sending the command, so a caller that activates a peer immediately afterwards
+lands on the new table rather than the one about to be discarded.
+
+If the Voice Processing unit will not start, the plain pair of `cpal` streams is
+used instead. The conversation still works; it just echoes on a loudspeaker.
+Refusing to talk at all would be a worse answer than talking with an echo.
+
+Element numbering follows CoreAudio and reads backwards at first: element 1 is
+the microphone and its **output** scope is what we read, while element 0 is the
+speaker and its **input** scope is what we write.
+
+Automatic gain control is deliberately off. The canceller and the noise
+suppressor are the point. Automatic gain makes a familiar voice keep changing
+level, which is more distracting than a friend who is simply quiet.
+
+`swivel doctor` reports whether cancellation is on. The menu has a toggle for
+people who wear headphones and want the audio untouched.
 
 ## 6. Session model
 
@@ -513,7 +552,7 @@ other applications.
 |---|---|---|
 | Hot microphone surprises a user | Trust loss | Chirps, menu bar state, mute, DND |
 | Relay path used instead of direct | Latency doubles | Show `RLY`, log path events |
-| Echo without headphones | Unusable on speakers | Warn in doctor, AEC later |
+| Voice unit will not start | Echo on speakers | Fall back to plain streams, and say so |
 | `audiopus_sys` fails to build on a friend's machine | No install | Ship a prebuilt binary, not source |
 | Jitter buffer grows and never shrinks | Latency creep | Explicit shrink rule, §5.4 |
 | AppKit call from a non-main thread | Crash | All UI behind a main-thread queue |

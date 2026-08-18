@@ -100,7 +100,14 @@ impl App {
             output: store.setting(crate::store::SETTING_OUTPUT_DEVICE)?,
         };
 
-        let engine = match Engine::start(tx.clone(), devices) {
+        // Echo cancellation is on unless the user turned it off. Most people
+        // do not wear headphones, and without it the far end hears itself.
+        let echo_cancellation = store
+            .setting(crate::store::SETTING_ECHO_CANCEL)?
+            .map(|v| v != "off")
+            .unwrap_or(true);
+
+        let engine = match Engine::start(tx.clone(), devices, echo_cancellation) {
             Ok(engine) => Some(engine),
             Err(e) => {
                 warn!("running without audio: {e}");
@@ -272,6 +279,28 @@ impl App {
             app.key_copied.store(false, Ordering::Relaxed);
             app.refresh_ui().await;
         });
+    }
+
+    /// True when echo cancellation is wanted.
+    pub fn echo_cancelling(&self) -> bool {
+        self.engine
+            .as_ref()
+            .map(|e| e.wants_echo_cancellation())
+            .unwrap_or(false)
+    }
+
+    /// Turns echo cancellation on or off. It applies on the next conversation.
+    pub async fn set_echo_cancellation(&self, on: bool) -> Result<()> {
+        self.store.lock().await.set_setting(
+            crate::store::SETTING_ECHO_CANCEL,
+            Some(if on { "on" } else { "off" }),
+        )?;
+
+        if let Some(engine) = &self.engine {
+            engine.set_echo_cancellation(on);
+        }
+        self.refresh_ui().await;
+        Ok(())
     }
 
     /// The devices in use.
@@ -970,6 +999,7 @@ impl App {
             knocks,
             mic,
             dnd,
+            echo_cancelling: self.echo_cancelling(),
             live_slots,
             fault: None,
             audio: self.audio_counters(),

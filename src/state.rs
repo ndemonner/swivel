@@ -94,6 +94,9 @@ pub struct UiState {
     pub knocks: Vec<KnockView>,
     pub mic: MicState,
     pub dnd: bool,
+    /// Echo cancellation is wanted. Without it a loudspeaker makes the far end
+    /// hear themselves.
+    pub echo_cancelling: bool,
     /// Slots in the live session, in the order they were added.
     pub live_slots: Vec<u8>,
     /// Set when something went wrong that the user must see.

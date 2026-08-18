@@ -42,6 +42,8 @@ pub enum Command {
     DisarmIfIdle,
     /// The key was copied. The panel says so for a moment.
     NoteKeyCopied,
+    /// Turn echo cancellation on or off.
+    ToggleEchoCancellation,
     /// Choose an audio device. `None` follows the system default.
     SetDevice {
         direction: Direction,
@@ -338,7 +340,7 @@ impl Ui {
                     self.show_panel();
                 }
             }
-            MenuAction::ShowMenu => self.status.show_menu(),
+            MenuAction::ShowMenu => self.status.show_menu(self.state.load().echo_cancelling),
             MenuAction::OpenPanel => self.show_panel(),
             MenuAction::ToggleMute => self.send(Command::ToggleMute),
             MenuAction::ToggleDnd => self.send(Command::ToggleDnd),
@@ -346,6 +348,7 @@ impl Ui {
             MenuAction::CopyKey => self.copy_key(),
             MenuAction::ChooseInput(index) => self.choose_device(Direction::Input, Some(index)),
             MenuAction::ChooseOutput(index) => self.choose_device(Direction::Output, Some(index)),
+            MenuAction::ToggleEchoCancellation => self.send(Command::ToggleEchoCancellation),
             MenuAction::ResetDevices => {
                 self.choose_device(Direction::Input, None);
                 self.choose_device(Direction::Output, None);
@@ -408,6 +411,12 @@ async fn handle_commands(app: Arc<App>, mut rx: tokio::sync::mpsc::UnboundedRece
             }
             Command::DisarmIfIdle => app.disarm_if_idle().await,
             Command::NoteKeyCopied => app.note_key_copied(),
+            Command::ToggleEchoCancellation => {
+                let on = !app.echo_cancelling();
+                if let Err(e) = app.set_echo_cancellation(on).await {
+                    warn!("cannot change echo cancellation: {e}");
+                }
+            }
             Command::SetDevice { direction, name } => {
                 if let Err(e) = app.set_device(direction, name.as_deref()).await {
                     warn!("cannot change the audio device: {e}");

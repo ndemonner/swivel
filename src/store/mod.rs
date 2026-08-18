@@ -237,6 +237,9 @@ pub const SETTING_INPUT_DEVICE: &str = "input_device";
 /// The setting that names the preferred output device.
 pub const SETTING_OUTPUT_DEVICE: &str = "output_device";
 
+/// The setting that turns echo cancellation off. Anything but `off` means on.
+pub const SETTING_ECHO_CANCEL: &str = "echo_cancel";
+
 /// Seconds since the Unix epoch. The database stores every time this way.
 pub fn now_secs() -> i64 {
     std::time::SystemTime::now()

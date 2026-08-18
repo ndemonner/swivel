@@ -20,6 +20,8 @@ pub enum Direction {
 /// Whether the output will be heard by the microphone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EchoRisk {
+    /// The voice unit is cancelling the echo, so a loudspeaker is fine.
+    Cancelled,
     /// A loudspeaker. The far end will hear itself.
     Likely,
     /// Headphones or a headset. Nothing leaks back.

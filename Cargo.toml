@@ -39,6 +39,8 @@ crossbeam-channel = "0.5"
 rand = "0.9"
 clap = { version = "4", features = ["derive"] }
 tokio-util = { version = "0.7.19", features = ["rt"] }
+coreaudio-rs = "0.14.2"
+objc2-audio-toolbox = "0.3.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

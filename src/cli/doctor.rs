@@ -124,11 +124,10 @@ fn device_check(faults: &mut Vec<String>) {
                     ));
                 }
                 match chosen.echo {
-                    device::EchoRisk::Likely => faults.push(
-                        "the default output is a loudspeaker. Version 1 has no echo canceller, \
-                         so the far end will hear themselves. Use headphones."
-                            .into(),
-                    ),
+                    device::EchoRisk::Cancelled => println!("      echo      cancelled"),
+                    device::EchoRisk::Likely => {
+                        println!("      echo      a loudspeaker, so echo cancellation matters here")
+                    }
                     device::EchoRisk::Unlikely => println!("      echo      unlikely"),
                     device::EchoRisk::Unknown => {
                         println!("      echo      unknown, so use headphones to be sure")
@@ -201,7 +200,7 @@ fn engine_check(faults: &mut Vec<String>) -> Option<Arc<Engine>> {
     println!();
     println!("  ENGINE");
 
-    let engine = match Engine::start(Arc::new(NullTx), DevicePreference::default()) {
+    let engine = match Engine::start(Arc::new(NullTx), DevicePreference::default(), true) {
         Ok(e) => e,
         Err(e) => {
             faults.push(format!("the audio engine will not start: {e}"));
@@ -216,6 +215,14 @@ fn engine_check(faults: &mut Vec<String>) -> Option<Arc<Engine>> {
 
     let state = engine.state();
     println!("    state      {state:?}");
+    println!(
+        "    echo       {}",
+        if engine.wants_echo_cancellation() {
+            "cancellation on, applied when a conversation starts"
+        } else {
+            "cancellation off, so use headphones"
+        }
+    );
 
     match engine.report.lock().ok().and_then(|g| g.clone()) {
         Some(report) => {
