@@ -335,8 +335,16 @@ conversation starts and destroyed when one ends, which is also exactly what
 Switching shape replaces the whole audio path. The output callback owns the read
 side of every packet queue, so a new path needs a new `SlotTable`. `Engine::arm`
 and `Engine::disarm` install the new table on the calling thread **before**
-sending the command, so a caller that activates a peer immediately afterwards
-lands on the new table rather than the one about to be discarded.
+sending the command.
+
+The engine, not the session code, owns the answer to "who is heard". The
+session declares its full member list through `AudioSink::set_members`, the
+engine stores that set, and every fresh `SlotTable` is populated from it inside
+`swap_slots` before the table is published. No caller of `arm`, `disarm`, or
+`set_devices` carries a re-activation duty. This rule exists because the first
+version spread that duty across the call sites, one of them forgot, and the
+result was a session where the person who added two members could hear only
+the one added last.
 
 If the Voice Processing unit will not start, the plain pair of `cpal` streams is
 used instead. The conversation still works; it just echoes on a loudspeaker.
