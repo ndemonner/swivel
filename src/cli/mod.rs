@@ -5,6 +5,7 @@
 //! last time a contact was reachable, not whether they are online now.
 
 mod fmt;
+pub mod tui;
 
 use crate::error::{Error, Result};
 use crate::store::{Store, identity, ticket::Ticket};
