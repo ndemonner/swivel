@@ -21,8 +21,14 @@ impl Table {
         self.rows.push(cells.to_vec());
     }
 
-    /// Prints the table, with `indent` before every line.
+    /// Prints the table to stdout, with `indent` before every line.
     pub fn print(&self, indent: &str) {
+        let mut out = std::io::stdout().lock();
+        let _ = self.write(&mut out, indent);
+    }
+
+    /// Writes the table anywhere.
+    pub fn write(&self, out: &mut impl std::io::Write, indent: &str) -> std::io::Result<()> {
         let widths = self.widths();
 
         let header: Vec<String> = self
@@ -31,12 +37,13 @@ impl Table {
             .zip(&widths)
             .map(|(h, w)| pad(h, *w))
             .collect();
-        println!("{indent}{}", header.join("  ").trim_end());
+        writeln!(out, "{indent}{}", header.join("  ").trim_end())?;
 
         for row in &self.rows {
             let cells: Vec<String> = row.iter().zip(&widths).map(|(c, w)| pad(c, *w)).collect();
-            println!("{indent}{}", cells.join("  ").trim_end());
+            writeln!(out, "{indent}{}", cells.join("  ").trim_end())?;
         }
+        Ok(())
     }
 
     fn widths(&self) -> Vec<usize> {

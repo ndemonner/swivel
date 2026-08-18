@@ -103,6 +103,14 @@ pub const BACKOFF_SECS: &[u64] = &[1, 2, 5, 15, 30];
 /// The random fraction added to each backoff step, to avoid a thundering herd.
 pub const BACKOFF_JITTER: f64 = 0.2;
 
+/// How long to wait after a connection ends before dialling again.
+///
+/// Both sides dial, so a duplicate is normal and one of the two is closed. The
+/// side whose connection was closed must not redial into the replacement that
+/// is still arriving, or the pair churns through several connections before it
+/// settles. This delay closes that race.
+pub const RECONNECT_SETTLE: Duration = Duration::from_millis(300);
+
 /// QUIC datagram send buffer. Deliberately small. When it fills, the encoder
 /// drops a frame rather than queueing it. A queued frame costs unbounded
 /// latency for the rest of the session.

@@ -6,10 +6,14 @@
 // T-126 removes this attribute once M7 closes.
 #![allow(dead_code)]
 
+mod app;
+mod audio;
 mod cli;
 mod config;
 mod error;
 mod logging;
+mod net;
+mod state;
 mod store;
 
 use clap::{Parser, Subcommand};
@@ -98,6 +102,6 @@ fn run() -> Result<()> {
         Some(Command::Approve { who, name }) => cli::approve(&who, name.as_deref()),
         Some(Command::Block { who }) => cli::block(&who),
         Some(Command::Doctor { .. }) => todo!("T-102: check the local machine"),
-        Some(Command::Tui) => todo!("T-105: headless mode"),
+        Some(Command::Tui) => cli::tui::run(),
     }
 }
