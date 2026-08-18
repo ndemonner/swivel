@@ -13,6 +13,7 @@ mod config;
 mod error;
 mod logging;
 mod net;
+mod session;
 mod state;
 mod store;
 

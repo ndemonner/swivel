@@ -258,12 +258,14 @@ impl Engine {
 
     /// Counters for `walkie doctor`.
     pub fn stats(&self) -> Stats {
+        let mut played = 0;
         let mut concealed = 0;
         let mut late = 0;
         let mut overrun = 0;
 
         for index in 0..MAX_PEERS {
             let slot = self.slots.slot(index);
+            played += slot.played.load(Ordering::Relaxed);
             concealed += slot.concealed.load(Ordering::Relaxed);
             late += slot.late.load(Ordering::Relaxed);
             overrun += slot.overrun.load(Ordering::Relaxed);
@@ -273,6 +275,7 @@ impl Engine {
             encoded: self.capture.encoded.load(Ordering::Relaxed),
             send_dropped: self.capture.dropped.load(Ordering::Relaxed),
             encode_errors: self.capture.encode_errors.load(Ordering::Relaxed),
+            played,
             concealed,
             late,
             overrun,
@@ -305,6 +308,8 @@ pub struct Stats {
     pub encoded: u64,
     pub send_dropped: u64,
     pub encode_errors: u64,
+    /// Frames decoded and heard. The positive signal that audio is arriving.
+    pub played: u64,
     pub concealed: u64,
     pub late: u64,
     pub overrun: u64,

@@ -90,3 +90,33 @@ Newest entries at the bottom. Keep entries short. Record surprises.
 - Added: T-050 and T-051 for choosing devices. The user asked for it. System
   defaults work today.
 - Next: M4 sessions, so two instances can actually talk.
+
+## 2026-08-18 — M4 sessions. Two instances talk.
+
+- Did: T-060..T-064. Session state, mesh fan-out, teardown, idle timer, mute,
+  do-not-disturb, and the speaking indicator.
+- **Verified end to end.** Two processes on one machine, one presses `2`, and
+  both microphones open with no answering step. Counters after ten seconds:
+  `encoded 829, sent 829, refused 0, played 828, concealed 0, late 0,
+  overrun 0`, in both directions. The single frame between sent and played is
+  the jitter buffer holding one frame, which is exactly right.
+- Learned: `App::start` used to take an `AudioSink`. It now builds the engine
+  itself, because the engine is both the sink and the thing that needs the
+  transmitter. A machine with no usable audio still gets a working roster,
+  since seeing who is online is useful on its own.
+- Surprise: calling `driver::supervise` from `on_session_open` made rustc fail
+  with a type cycle. A supervisor runs a connection, a connection carries a
+  `SessionOpen`, and that dials a new member who needs a supervisor, so the
+  opaque future type referred to itself. Boxing did not help, because the
+  compiler still had to prove `Send` on the inner type. The fix is a channel:
+  the control path asks for a supervisor and one task starts it. That is better
+  layering as well as a working build.
+- Learned: `Connection::send_datagram` is synchronous, so the audio sender
+  thread needs no runtime. The member connections are published through
+  `ArcSwap`, so reading them is a pointer swap with no lock.
+- Added: a `played` counter. Every other counter reports a failure, and absence
+  of failure is not proof that audio arrived. `played` is the positive signal.
+- Testing note: driving `walkie tui` through a fifo needs a writer held open,
+  for example `sleep 900 > /tmp/wa.in &`. Without it the first `echo` closes
+  the pipe, standard input reaches end of file, and the instance shuts down.
+- Next: M5, the menu bar and the panel.

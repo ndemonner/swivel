@@ -104,11 +104,11 @@ before you touch it.
 
 ## M4 — Sessions
 
-- [~] **T-060** Session state machine and the member mesh — branch task/060-session
-- [~] **T-061** `SessionOpen` fan-out and dial-on-demand for unknown members — branch task/060-session
-- [~] **T-062** `SessionClose`, empty-set teardown, and the 10 minute idle timer — branch task/060-session
-- [~] **T-063** Mute, do-not-disturb, and per-contact `auto_open` — branch task/060-session
-- [~] **T-064** `TalkState` speaking indicator with a voice activity gate — branch task/060-session
+- [x] **T-060** Session state machine and the member mesh
+- [x] **T-061** `SessionOpen` fan-out and dial-on-demand for unknown members
+- [x] **T-062** `SessionClose`, empty-set teardown, and the 10 minute idle timer
+- [x] **T-063** Mute, do-not-disturb, and per-contact `auto_open`
+- [x] **T-064** `TalkState` speaking indicator with a voice activity gate
 
 ## M5 — User interface
 
