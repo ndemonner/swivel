@@ -9,6 +9,7 @@
 mod config;
 mod error;
 mod logging;
+mod store;
 
 use clap::{Parser, Subcommand};
 
