@@ -186,13 +186,38 @@ before you touch it.
 
 - [x] **T-110** `build.rs` that embeds `Info.plist` through the linker
   - Accept: `otool -s __TEXT __info_plist` shows the plist in the binary.
-- [ ] **T-111** `scripts/build-release.sh` with ad-hoc `codesign`
+- [x] **T-111** `scripts/build-release.sh` with ad-hoc `codesign`
+  - Shipped alongside T-114. The script existed and signed ad-hoc; only the
+    checkbox was stale.
 - [ ] **T-112** Release profile: `lto = "fat"`, `codegen-units = 1`, `panic` stays
   `unwind` because the audio callbacks must not abort the process
 - [ ] **T-113** README with a two-minute quick start
 - [x] **T-114** Universal binary for Apple Silicon and Intel
   - The release script writes `./swivel` in the repository root, joined with
     `lipo` and signed afterwards, because `lipo` discards signatures.
+- [~] **T-137** `swivel update` over GitHub releases — branch
+  task/137-update-flow
+  - The repo (ndemonner/swivel) is being made public. Releases are tagged
+    `v<semver>`, built locally by `scripts/release.sh`, and uploaded as
+    release assets with a detached ed25519 signature.
+  - `swivel update` reads the version from the `releases/latest` redirect,
+    compares it with the built-in version, downloads the binary and its
+    signature, verifies against a public key compiled into the binary, and
+    atomically replaces its own executable. `--check` only reports.
+  - The signature is not optional. This program opens microphones; a
+    compromised update channel is remote microphone access, so GitHub's TLS
+    alone is not enough.
+  - Accept: `swivel update` on an old version installs the latest release and
+    the running copy is untouched until restart.
+  - Accept: a corrupted or wrongly signed download is refused and the
+    installed binary is unchanged.
+- [~] **T-138** Stable self-signed release certificate (was B-002) — branch
+  task/137-update-flow
+  - macOS ties the microphone grant to the code signing identity. Ad-hoc
+    signatures change with every build, so every update re-prompts. One
+    self-signed certificate on the release machine keeps the identity stable.
+  - Accept: `scripts/build-release.sh` signs with the certificate when it is
+    present and falls back to ad-hoc with a warning when it is not.
 
 ## M9 — Verification
 
