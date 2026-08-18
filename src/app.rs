@@ -336,20 +336,10 @@ impl App {
             Direction::Input => wanted.input = name.map(str::to_string),
             Direction::Output => wanted.output = name.map(str::to_string),
         }
+        // Reopening the speaker replaces the slot table. The engine refills it
+        // from the declared membership on its own, so nothing more is needed
+        // here for the session to keep playing.
         engine.set_devices(wanted);
-
-        // Reopening the speaker replaces the slot table, so everyone in the
-        // session has to be put back on the new one or their audio stops.
-        let members = {
-            let guard = self.session.lock().await;
-            guard
-                .as_ref()
-                .map(|s| s.members.iter().copied().collect::<Vec<_>>())
-                .unwrap_or_default()
-        };
-        for peer in members {
-            self.audio.activate(peer);
-        }
 
         self.publish_session().await;
         self.refresh_ui().await;
@@ -400,12 +390,6 @@ impl App {
             session.members.len()
         };
 
-        if let Some(engine) = &self.engine
-            && engine.slots().activate(peer).is_none()
-        {
-            warn!("no audio slot was free for {}", peer.fmt_short());
-        }
-
         self.publish_session().await;
         self.announce_session().await;
         self.refresh_ui().await;
@@ -422,10 +406,6 @@ impl App {
             session.remove(peer);
             (session.members.len(), session.id)
         };
-
-        if let Some(engine) = &self.engine {
-            engine.slots().deactivate(peer);
-        }
 
         // Tell the peer it is out, so its own microphone closes.
         if let Some(handle) = self.peers.get(peer).await {
@@ -468,9 +448,12 @@ impl App {
             }
         }
 
+        // Nobody is heard once the session is gone. Clearing the membership
+        // also clears the slot table, and the disarm that follows rebuilds the
+        // audio path from that same empty set.
+        self.audio.set_members(&[]);
         if let Some(engine) = &self.engine {
             engine.set_transmitting(false);
-            engine.slots().clear();
             engine.disarm();
         }
         self.tx.clear();
@@ -479,8 +462,13 @@ impl App {
         self.refresh_ui().await;
     }
 
-    /// Rebuilds the connection list the audio sender thread uses, and decides
-    /// whether the microphone should be open.
+    /// Pushes the session membership to the audio engine, in both directions.
+    ///
+    /// Receive: declares who is heard, which the engine holds on to across
+    /// audio path rebuilds. Send: rebuilds the connection list the audio
+    /// sender thread uses, and decides whether the microphone should be open.
+    /// This is the one place session state reaches the audio path, and it runs
+    /// after every membership change and once a second from `watch_session`.
     async fn publish_session(&self) {
         let members = {
             let guard = self.session.lock().await;
@@ -489,6 +477,8 @@ impl App {
                 None => Vec::new(),
             }
         };
+
+        self.audio.set_members(&members);
 
         let mut connections = Vec::with_capacity(members.len());
         for peer in &members {
@@ -605,9 +595,6 @@ impl App {
         };
 
         for peer in &members {
-            if let Some(engine) = &self.engine {
-                engine.slots().activate(*peer);
-            }
             self.supervise_one(*peer).await;
         }
 
@@ -626,10 +613,6 @@ impl App {
             session.remove(from);
             session.members.len()
         };
-
-        if let Some(engine) = &self.engine {
-            engine.slots().deactivate(from);
-        }
 
         if remaining == 0 {
             self.end_session().await;

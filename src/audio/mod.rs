@@ -41,13 +41,13 @@ pub trait AudioSink: Send + Sync {
     /// Delivers one parsed datagram from a peer.
     fn deliver(&self, peer: EndpointId, packet: &AudioPacket<'_>);
 
-    /// Marks a peer as a member of the live session, so its audio is mixed.
+    /// Declares the full set of peers whose audio is mixed.
     ///
-    /// Returns false when every peer slot is in use.
-    fn activate(&self, peer: EndpointId) -> bool;
-
-    /// Removes a peer from the live session.
-    fn deactivate(&self, peer: EndpointId);
+    /// The session owns the member list, and this is the one way it reaches
+    /// the audio path. The engine keeps the set and applies it again whenever
+    /// it rebuilds the audio path, so a rebuild cannot silently drop a member.
+    /// An empty set means nobody is heard.
+    fn set_members(&self, members: &[EndpointId]);
 }
 
 /// How encoded audio leaves the machine.
@@ -67,10 +67,7 @@ pub struct NullSink;
 
 impl AudioSink for NullSink {
     fn deliver(&self, _peer: EndpointId, _packet: &AudioPacket<'_>) {}
-    fn activate(&self, _peer: EndpointId) -> bool {
-        true
-    }
-    fn deactivate(&self, _peer: EndpointId) {}
+    fn set_members(&self, _members: &[EndpointId]) {}
 }
 
 /// A transmitter that drops everything.
@@ -121,8 +118,9 @@ enum Command {
         ///
         /// Starting the voice unit replaces the whole audio path, and the
         /// output callback owns the read side of every queue, so a new path
-        /// needs a new table. The caller swaps the table before sending this,
-        /// so anything it activates afterwards lands on the new one.
+        /// needs a new table. `swap_slots` installs the new table before this
+        /// command is sent, already populated with the declared members, so a
+        /// rebuild never loses anyone mid-session.
         consumers: Vec<packet::PacketConsumer>,
     },
     /// Start transmitting. The microphone must already be armed.
@@ -168,6 +166,13 @@ pub struct Engine {
     /// queues, and therefore a new table. Everything else reads it through the
     /// swap.
     slots: Arc<arc_swap::ArcSwap<SlotTable>>,
+    /// The peers whose audio should be mixed, as last declared by the session.
+    ///
+    /// This is the engine's own copy of the session membership, and it exists
+    /// so that rebuilding the audio path cannot lose anyone: every fresh slot
+    /// table is populated from this set before it is published. The lock is
+    /// never touched by a real-time callback.
+    members: std::sync::Mutex<Vec<EndpointId>>,
     /// True while the voice unit is running and cancelling echo.
     cancelling: Arc<AtomicBool>,
     /// Whether echo cancellation should be used at all.
@@ -273,6 +278,7 @@ impl Engine {
             report,
             state,
             armed,
+            members: std::sync::Mutex::new(Vec::new()),
             cancelling,
             want_cancelling,
         }))
@@ -298,13 +304,29 @@ impl Engine {
     /// Installs a fresh slot table and returns the read sides for the audio
     /// thread.
     ///
-    /// This runs on the caller's thread, before the command is sent, so that a
-    /// caller which activates a peer straight afterwards lands on the new
-    /// table rather than the one about to be thrown away.
+    /// The new table is populated from the declared membership before it is
+    /// published, so a path rebuild never loses a member. The membership lock
+    /// is held across the store, so a concurrent `set_members` cannot land
+    /// between populating the table and publishing it.
     fn swap_slots(&self) -> Vec<packet::PacketConsumer> {
+        let members = self.members.lock().unwrap_or_else(|e| e.into_inner());
         let (table, consumers) = SlotTable::new();
+        self.apply_members(&table, &members);
         self.slots.store(Arc::new(table));
         consumers
+    }
+
+    /// Makes a slot table agree with the membership: every member holds an
+    /// active slot and nobody else does. A member whose slot is newly claimed
+    /// gets a fresh jitter estimate.
+    fn apply_members(&self, table: &SlotTable, members: &[EndpointId]) {
+        for index in reconcile(table, members) {
+            if let Ok(mut estimators) = self.estimators.lock()
+                && let Some(estimator) = estimators.get_mut(index)
+            {
+                estimator.reset(&table.slot(index).target_frames);
+            }
+        }
     }
 
     /// True when the audio path is cancelling echo.
@@ -353,11 +375,12 @@ impl Engine {
         self.capture.speaking.load(Ordering::Relaxed)
     }
 
-    /// The slot table, for the session manager.
+    /// The current slot table.
     ///
-    /// Reading it is a pointer swap. Hold the result only for as long as one
-    /// operation, because a device change replaces the table.
-    pub fn slots(&self) -> Arc<SlotTable> {
+    /// Private on purpose. The session declares who is heard through
+    /// `AudioSink::set_members`, and reaching around that would let the table
+    /// and the declared membership disagree.
+    fn slots(&self) -> Arc<SlotTable> {
         self.slots.load_full()
     }
 
@@ -468,27 +491,47 @@ impl AudioSink for Engine {
         slot.push(stored);
     }
 
-    fn activate(&self, peer: EndpointId) -> bool {
-        let slots = self.slots();
-        match slots.activate(peer) {
-            Some(index) => {
-                if let Ok(mut estimators) = self.estimators.lock()
-                    && let Some(estimator) = estimators.get_mut(index)
-                {
-                    estimator.reset(&slots.slot(index).target_frames);
-                }
-                true
-            }
-            None => {
-                warn!("every audio slot is in use, so a peer could not be added");
-                false
-            }
+    fn set_members(&self, members: &[EndpointId]) {
+        let mut desired = self.members.lock().unwrap_or_else(|e| e.into_inner());
+        desired.clear();
+        desired.extend_from_slice(members);
+        self.apply_members(&self.slots(), &desired);
+    }
+}
+
+/// Makes `table` agree with `members` and returns the newly claimed slots.
+///
+/// A member that already holds a slot keeps it, so its stream is not
+/// disturbed. Everyone else on the table is deactivated. On a fresh table
+/// every member is newly claimed, which is how a rebuilt audio path gets its
+/// members back.
+fn reconcile(table: &SlotTable, members: &[EndpointId]) -> Vec<usize> {
+    for peer in table.active_peers() {
+        if !members.contains(&peer) {
+            table.deactivate(peer);
         }
     }
 
-    fn deactivate(&self, peer: EndpointId) {
-        self.slots().deactivate(peer);
+    let mut claimed = Vec::new();
+    for peer in members {
+        let held = table.index_of(*peer).is_some();
+        match table.activate(*peer) {
+            Some(index) => {
+                if !held {
+                    claimed.push(index);
+                }
+            }
+            None => {
+                // The session caps itself below MAX_PEERS, so this is a fault,
+                // not a normal path.
+                warn!(
+                    "every audio slot is in use, so {} cannot be heard",
+                    peer.fmt_short()
+                );
+            }
+        }
     }
+    claimed
 }
 
 /// Owns the cpal streams for the life of the process.
@@ -988,5 +1031,89 @@ pub fn log_report(report: &DeviceReport) {
     }
     if report.echo == device::EchoRisk::Likely {
         warn!("the output is a loudspeaker. Use headphones, or the far end hears an echo.");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use iroh::SecretKey;
+    use std::sync::atomic::Ordering;
+
+    fn id(n: u8) -> EndpointId {
+        SecretKey::from_bytes(&[n; 32]).public()
+    }
+
+    #[test]
+    fn reconcile_populates_a_fresh_table() {
+        // A path rebuild publishes a fresh, empty table. Every member must be
+        // claimed on it, or their audio is dropped at `deliver`.
+        let (table, _consumers) = SlotTable::new();
+        let members = [id(1), id(2)];
+
+        let claimed = reconcile(&table, &members);
+
+        assert_eq!(claimed.len(), 2);
+        for peer in members {
+            let index = table.index_of(peer).expect("the member must own a slot");
+            assert!(table.slot(index).active.load(Ordering::Acquire));
+        }
+    }
+
+    #[test]
+    fn reconcile_keeps_a_member_that_stays() {
+        // This is the three-person bug. Adding a member must not disturb the
+        // members already heard.
+        let (table, _consumers) = SlotTable::new();
+        reconcile(&table, &[id(1)]);
+        let index = table.index_of(id(1)).unwrap();
+        let generation = table.slot(index).generation.load(Ordering::Acquire);
+
+        let claimed = reconcile(&table, &[id(1), id(2)]);
+
+        assert_eq!(claimed.len(), 1, "only the new member is newly claimed");
+        assert_eq!(table.index_of(id(1)), Some(index));
+        assert_eq!(
+            table.slot(index).generation.load(Ordering::Acquire),
+            generation,
+            "a member that stays must keep its stream state"
+        );
+        assert!(table.index_of(id(2)).is_some());
+    }
+
+    #[test]
+    fn reconcile_removes_a_member_that_left() {
+        let (table, _consumers) = SlotTable::new();
+        reconcile(&table, &[id(1), id(2)]);
+
+        reconcile(&table, &[id(2)]);
+
+        assert_eq!(table.index_of(id(1)), None);
+        assert!(table.index_of(id(2)).is_some());
+    }
+
+    #[test]
+    fn reconcile_with_nobody_clears_the_table() {
+        let (table, _consumers) = SlotTable::new();
+        reconcile(&table, &[id(1), id(2)]);
+
+        let claimed = reconcile(&table, &[]);
+
+        assert!(claimed.is_empty());
+        assert!(table.active_peers().is_empty());
+    }
+
+    #[test]
+    fn reconcile_survives_more_members_than_slots() {
+        let (table, _consumers) = SlotTable::new();
+        let members: Vec<EndpointId> = (1..=MAX_PEERS as u8 + 2).map(id).collect();
+
+        let claimed = reconcile(&table, &members);
+
+        assert_eq!(
+            claimed.len(),
+            MAX_PEERS,
+            "the extras are refused, not fatal"
+        );
     }
 }
