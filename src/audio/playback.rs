@@ -183,6 +183,7 @@ fn mix_frame(
 
             Decision::Play => {
                 let Some(packet) = packet else { continue };
+                shared.played.fetch_add(1, Ordering::Relaxed);
                 slot.decoder
                     .decode_float(packet.payload(), &mut slot.pcm, false)
             }

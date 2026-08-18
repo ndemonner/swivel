@@ -87,6 +87,25 @@ pub struct UiState {
     pub live_slots: Vec<u8>,
     /// Set when something went wrong that the user must see.
     pub fault: Option<String>,
+    /// Audio counters. Shown by the headless mode and by `doctor`.
+    pub audio: AudioCounters,
+}
+
+/// What the audio path is actually doing.
+///
+/// These are the numbers to look at when a call sounds wrong. Concealed frames
+/// mean loss. Late frames mean the jitter buffer is too shallow. Refused
+/// datagrams mean the link is congested.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AudioCounters {
+    pub sent: u64,
+    pub refused: u64,
+    pub encoded: u64,
+    /// Frames decoded and heard.
+    pub played: u64,
+    pub concealed: u64,
+    pub late: u64,
+    pub overrun: u64,
 }
 
 impl UiState {

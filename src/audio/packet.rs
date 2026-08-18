@@ -100,6 +100,10 @@ pub struct SlotShared {
     /// The jitter target in frames, published by the network side.
     pub target_frames: AtomicU32,
 
+    /// Frames decoded and mixed into the output. This is the positive signal
+    /// that audio is arriving. Every other counter only says what went wrong.
+    pub played: AtomicU64,
+
     /// Frames concealed because a packet never arrived.
     pub concealed: AtomicU64,
 
@@ -119,6 +123,7 @@ impl SlotShared {
             active: AtomicBool::new(false),
             generation: AtomicU32::new(0),
             target_frames: AtomicU32::new(crate::config::JITTER_START_FRAMES as u32),
+            played: AtomicU64::new(0),
             concealed: AtomicU64::new(0),
             late: AtomicU64::new(0),
             overrun: AtomicU64::new(0),
@@ -211,6 +216,7 @@ impl SlotTable {
         owners[index] = Some(peer);
 
         let slot = &self.shared[index];
+        slot.played.store(0, Ordering::Relaxed);
         slot.concealed.store(0, Ordering::Relaxed);
         slot.late.store(0, Ordering::Relaxed);
         slot.overrun.store(0, Ordering::Relaxed);
