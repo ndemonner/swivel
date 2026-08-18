@@ -70,7 +70,9 @@ impl Ticket {
 
         let bytes = BASE32_NOPAD
             .decode(body.to_uppercase().as_bytes())
-            .map_err(|_| Error::Ticket("the key contains a character that is not valid".into()))?;
+            // A base32 failure covers both a bad character and a bad length.
+            // Do not claim it is one when it may be the other.
+            .map_err(|_| Error::Ticket("the key is damaged or incomplete".into()))?;
 
         let decoded: TicketV1 = postcard::from_bytes(&bytes)
             .map_err(|_| Error::Ticket("the key is truncated or damaged".into()))?;
@@ -139,7 +141,7 @@ mod tests {
     #[test]
     fn a_bad_character_says_so() {
         let e = Ticket::decode("wt1!!!!").unwrap_err();
-        assert!(e.to_string().contains("not valid"), "{e}");
+        assert!(e.to_string().contains("damaged or incomplete"), "{e}");
     }
 
     #[test]
@@ -148,7 +150,7 @@ mod tests {
         let cut = &ticket[..ticket.len() / 2];
         let e = Ticket::decode(cut).unwrap_err();
         assert!(
-            e.to_string().contains("truncated") || e.to_string().contains("not valid"),
+            e.to_string().contains("truncated") || e.to_string().contains("damaged"),
             "{e}"
         );
     }
