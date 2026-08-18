@@ -3,3 +3,6 @@
 *.db
 *.db-journal
 .DS_Store
+
+# The distributable binary, produced by scripts/build-release.sh
+/swivel

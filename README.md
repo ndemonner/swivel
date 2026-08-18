@@ -82,16 +82,45 @@ opens the menu, which has Quit in it. `pkill swivel` also works.
 ## Building
 
 ```bash
-./scripts/build-release.sh
+./scripts/build-release.sh            # both architectures, for sending out
+./scripts/build-release.sh --fast     # this machine only, for testing
 ```
 
-That produces one signed binary, about 15 MB, with no dependencies to install.
-Send the file. libopus and SQLite are compiled in.
+That writes `./swivel` in the repository root: one signed universal binary,
+about 32 MB, that runs on both Apple Silicon and Intel. There is nothing for the
+recipient to install. libopus and SQLite are compiled in.
 
 The permission prompt comes from an `Info.plist` linked into the binary itself,
 because there is no bundle to put one in. An ad-hoc signature gives macOS a
 stable identity to remember the grant against. A rebuild changes that identity,
 so a new build asks once more.
+
+## Sending it to a friend
+
+**Give them a URL and one line.** A GitHub release works, and so does any static
+host.
+
+```bash
+curl -fsSL <url>/swivel -o swivel && chmod +x swivel && ./swivel doctor
+```
+
+`curl` does not mark the file as quarantined, so Gatekeeper never blocks it.
+This matters: the binary is ad-hoc signed rather than notarised, so a
+**browser, AirDrop, Messages, or Slack** download *is* marked, and macOS refuses
+to run it until the mark is cleared:
+
+```bash
+xattr -d com.apple.quarantine swivel
+chmod +x swivel
+./swivel doctor
+```
+
+Start with `swivel doctor` either way. It checks the audio devices and triggers
+the microphone prompt, so anything wrong shows up before they try to talk to
+somebody.
+
+Notarising would remove the quarantine step for every route, but it needs a paid
+Apple Developer account. For a handful of friends, the `curl` line is simpler.
 
 ## Privacy
 
