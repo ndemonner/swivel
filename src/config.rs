@@ -169,6 +169,21 @@ pub const MAX_IDLE: Duration = Duration::from_secs(20);
 pub const INITIAL_MTU: u16 = 1200;
 
 // ---------------------------------------------------------------------------
+// Updates
+// ---------------------------------------------------------------------------
+
+/// The GitHub repository whose releases `swivel update` installs from.
+pub const UPDATE_REPO: &str = "ndemonner/swivel";
+
+/// The ed25519 public key that every release artifact must be signed with.
+///
+/// The matching private key lives only on the maintainer's machine, created by
+/// `swivel release-keygen` and used by `scripts/release.sh`. An update whose
+/// signature does not verify against this key is refused, whatever TLS said.
+pub const RELEASE_PUBKEY_HEX: &str =
+    "ab213fcd4d5e9990eba3c1989766ea2110e37fb005ef0b93b90f251ece54d912";
+
+// ---------------------------------------------------------------------------
 // User interface
 // ---------------------------------------------------------------------------
 

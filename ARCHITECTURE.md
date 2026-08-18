@@ -542,6 +542,45 @@ made the key window. Digits arrive as ordinary `keyDown:` events on the panel's
 view. This avoids registering ten global hotkeys and avoids stealing digits from
 other applications.
 
+### 9.5 Releases and self-update
+
+Releases are GitHub releases on the public repository named by
+`config::UPDATE_REPO`, tagged `v<major.minor.patch>`. `scripts/release.sh`
+cuts one: it bumps the version, tags, builds the signed universal binary, and
+uploads two assets, `swivel` and `swivel.sig`.
+
+`swivel update` installs the newest one. The design constraints, in order:
+
+1. **The update must prove its origin.** This program opens microphones, so a
+   compromised update channel is remote microphone access. Every artifact is
+   signed with a project ed25519 key. The public key is compiled into the
+   binary as `config::RELEASE_PUBKEY_HEX`, and a download that does not verify
+   is refused. TLS and the GitHub account are treated as insufficient alone.
+   The private key lives only on the release machine, at
+   `release-signing.key` next to the database, created by
+   `swivel release-keygen`. `swivel release-sign` refuses a key that does not
+   match the compiled-in public key, so an unusable release cannot be
+   published by accident.
+2. **No API, no JSON, no tokens.** GitHub answers `releases/latest` with a
+   redirect to `releases/tag/<tag>`; the tag carries the version. Downloads
+   run through `curl`, which every macOS ships and which does not set the
+   quarantine flag, so Gatekeeper never enters the picture.
+3. **The swap is atomic and reversible.** The download is staged in the same
+   directory as the running binary, verified there, and renamed over it. The
+   running process keeps its inode and is unaffected until restart. The
+   previous binary stays as `swivel.old`.
+4. **The microphone grant survives.** macOS ties the TCC grant to the code
+   signing identity. `scripts/make-signing-cert.sh` creates one self-signed
+   certificate ("swivel release") on the release machine, and
+   `build-release.sh` signs with it, with the identifier `dev.motor.swivel`.
+   The identity is then the same for every release, so an update does not
+   re-ask for the microphone. Without the certificate the script falls back
+   to ad-hoc signing and says so; everything still works, but each update
+   re-prompts.
+
+`SWIVEL_UPDATE_BASE` overrides the release host. It exists for tests, which
+run against a local server that mimics the two GitHub endpoints.
+
 ## 10. Testing
 
 1. **Unit.** Ticket round trip, slot assignment, jitter buffer decisions, wire

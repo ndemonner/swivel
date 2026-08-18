@@ -221,3 +221,27 @@ Newest entries at the bottom. Keep entries short. Record surprises.
   nothing.
 - Next: T-136. With `swap_slots` self-populating, the only remaining reason
   `arm` rebuilds while already talking is gone.
+
+## 2026-08-18 — T-137, T-138 release flow and self-update
+
+- Did: `swivel update` over GitHub releases with mandatory ed25519 signature
+  verification; `scripts/release.sh` to cut releases; a stable self-signed
+  code signing certificate so updates keep the microphone grant.
+- Design: no API, no JSON, no tokens. The `releases/latest` redirect carries
+  the version in its Location header, and `curl` does the transfers. curl
+  also never sets the quarantine flag, so Gatekeeper stays out of it.
+- Learned: OpenSSL 3 exports PKCS12 with ciphers `security import` cannot
+  read. The error is "MAC verification failed (wrong password?)", which
+  points at the wrong cause entirely. The fix is `-legacy` on the export.
+  LibreSSL, which macOS ships, needs no flag, so the script probes for it.
+- Learned: `security add-trusted-cert` blocks on a GUI password dialog. A
+  script that runs it must say so, or a headless session looks hung.
+- The keys: the release signing key is
+  `~/Library/Application Support/dev.motor.swivel/release-signing.key`, and
+  the public half is `RELEASE_PUBKEY_HEX` in config.rs. Losing the key file
+  means no more releases that existing binaries accept. It needs a backup.
+- Blocked on: the repository is still private, and only its owner
+  (ndemonner) can make it public. `swivel update` works the moment that
+  flips. wtachau has push, which is enough to publish the release itself.
+- Next: T-103/T-104 doctor extensions, or T-120 to turn this session's local
+  release-server test into a script.

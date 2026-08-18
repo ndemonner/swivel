@@ -195,8 +195,7 @@ before you touch it.
 - [x] **T-114** Universal binary for Apple Silicon and Intel
   - The release script writes `./swivel` in the repository root, joined with
     `lipo` and signed afterwards, because `lipo` discards signatures.
-- [~] **T-137** `swivel update` over GitHub releases — branch
-  task/137-update-flow
+- [x] **T-137** `swivel update` over GitHub releases
   - The repo (ndemonner/swivel) is being made public. Releases are tagged
     `v<semver>`, built locally by `scripts/release.sh`, and uploaded as
     release assets with a detached ed25519 signature.
@@ -211,8 +210,7 @@ before you touch it.
     the running copy is untouched until restart.
   - Accept: a corrupted or wrongly signed download is refused and the
     installed binary is unchanged.
-- [~] **T-138** Stable self-signed release certificate (was B-002) — branch
-  task/137-update-flow
+- [x] **T-138** Stable self-signed release certificate (was B-002)
   - macOS ties the microphone grant to the code signing identity. Ad-hoc
     signatures change with every build, so every update re-prompts. One
     self-signed certificate on the release machine keeps the identity stable.
@@ -239,7 +237,8 @@ before you touch it.
 
 ## Backlog — not scheduled
 
-- [ ] **B-002** A stable self-signed certificate to stop repeat TCC prompts
+- [x] **B-002** A stable self-signed certificate to stop repeat TCC prompts
+  - Done as T-138.
 - [ ] **B-003** More than nine slots with a two-digit entry mode
 - [ ] **B-004** Opus stereo or a raw PCM mode for a LAN
 - [ ] **B-005** Linux and Windows user interfaces

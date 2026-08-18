@@ -7,6 +7,7 @@
 pub mod doctor;
 mod fmt;
 pub mod tui;
+pub mod update;
 
 use crate::error::{Error, Result};
 use crate::store::{Store, identity, ticket::Ticket};

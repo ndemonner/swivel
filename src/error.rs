@@ -41,6 +41,9 @@ pub enum Error {
     #[error("network error: {0}")]
     Net(String),
 
+    #[error("update error: {0}")]
+    Update(String),
+
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }

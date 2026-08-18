@@ -29,6 +29,9 @@ serde = { version = "1", features = ["derive"] }
 postcard = { version = "1", features = ["alloc"] }
 data-encoding = "2"
 
+# release signing. Already in the tree through iroh, so this costs nothing.
+ed25519-dalek = "3"
+
 # plumbing
 anyhow = "1"
 thiserror = "2"
