@@ -126,11 +126,10 @@ window. The icon shows the state:
 A left click opens the panel. A right click opens a menu with Open walkie,
 Mute, Do not disturb, End session, Copy my key, and Quit.
 
-The **armed** state matters. Opening the panel opens the microphone before you
-choose a contact, so that the first word of a talk session survives the device
-start. That is an open microphone, so it gets its own icon rather than hiding
-behind the idle one. It closes when the panel closes, and a timer closes it
-after 8 seconds in any case.
+The **armed** state matters. It means the input device is open but nothing is
+being sent, which happens for a moment while a session comes up and whenever you
+are muted inside one. It gets its own icon rather than hiding behind the idle
+one.
 
 ### 6.2 The panel
 
@@ -208,9 +207,10 @@ are all silent and visible.
 
 1. **Menu bar state.** The icon is filled and shows the live slot numbers. This
    is the primary signal and it is always on screen.
-2. **The macOS microphone indicator.** The input stream is opened only when it
-   might be used, never for the life of the process. The system indicator
-   therefore means something.
+2. **The macOS microphone indicator.** The input device opens when a
+   conversation starts and closes when it ends. It is never opened to look at
+   the roster, and never held open for the life of the process, so the system
+   indicator means exactly what it appears to mean.
 3. **Mute.** `⌃⌥⌘M` forces the microphone off. Sessions stay open. Members see
    you as muted.
 4. **Do not disturb.** Refuses incoming session opens. Contacts see `DND`.

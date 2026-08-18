@@ -316,6 +316,10 @@ independent conversations.
 
 ### 6.2 Opening
 
+The microphone opens here and nowhere else. Two paths reach it: the user presses
+a digit, or a contact sends `SessionOpen`. Opening the panel does not open the
+microphone.
+
 1. The user presses a digit for slot `n`.
 2. The session manager resolves slot `n` to an `EndpointId`.
 3. If there is no session, it creates one with `id = random u64`.

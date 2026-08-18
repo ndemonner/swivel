@@ -93,6 +93,16 @@ pub enum EngineState {
     Live = 2,
 }
 
+/// The devices the user chose, by name.
+///
+/// Empty means "use the system default". The audio thread reads this whenever
+/// it opens a device, so a change takes effect on the next open.
+#[derive(Debug, Clone, Default)]
+pub struct DevicePreference {
+    pub input: Option<String>,
+    pub output: Option<String>,
+}
+
 /// A command for the audio thread.
 ///
 /// `cpal::Stream` is not `Send` on macOS, so the streams live on one thread and
@@ -114,6 +124,8 @@ enum Command {
     /// the process.
     Disarm,
     Chirp(Chirp),
+    /// Close and reopen the devices, picking up a changed preference.
+    Reopen,
     Shutdown,
 }
 
@@ -122,7 +134,6 @@ enum Command {
 /// Cloning is cheap. Dropping the last one stops the audio thread.
 pub struct Engine {
     commands: crossbeam_channel::Sender<Command>,
-    slots: Arc<SlotTable>,
     estimators: Arc<std::sync::Mutex<Vec<Estimator>>>,
     capture: Arc<capture::CaptureShared>,
     chirps: Arc<ChirpPlayer>,
@@ -134,6 +145,14 @@ pub struct Engine {
     /// `state` cannot answer this. An armed but silent microphone still reports
     /// `Listening`, and the difference is exactly what the idle timer needs.
     armed: Arc<AtomicBool>,
+    /// The chosen devices. Read by the audio thread on every open.
+    preference: Arc<std::sync::Mutex<DevicePreference>>,
+    /// The peer slots.
+    ///
+    /// This is swapped when the output device is reopened. The callback owns
+    /// the read side of every packet queue, so a new stream needs new queues,
+    /// and therefore a new table. Everything else reads it through the swap.
+    slots: Arc<arc_swap::ArcSwap<SlotTable>>,
 }
 
 /// What the engine found when it opened the devices.
@@ -150,9 +169,11 @@ pub struct DeviceReport {
 
 impl Engine {
     /// Starts the audio thread. The devices stay closed until `arm` is called.
-    pub fn start(tx: Arc<dyn AudioTx>) -> Result<Arc<Self>> {
+    pub fn start(tx: Arc<dyn AudioTx>, preference: DevicePreference) -> Result<Arc<Self>> {
         let (slot_table, consumers) = SlotTable::new();
-        let slots = Arc::new(slot_table);
+        let preference = Arc::new(std::sync::Mutex::new(preference));
+        let slots: Arc<arc_swap::ArcSwap<SlotTable>> =
+            Arc::new(arc_swap::ArcSwap::new(Arc::new(slot_table)));
         let chirps = Arc::new(ChirpPlayer::new());
         let report = Arc::new(std::sync::Mutex::new(None));
         let state = Arc::new(std::sync::atomic::AtomicU8::new(EngineState::Idle as u8));
@@ -174,6 +195,8 @@ impl Engine {
             let capture_probe = capture_probe.clone();
             let state = state.clone();
             let armed = armed.clone();
+            let preference = preference.clone();
+            let slots = slots.clone();
 
             std::thread::Builder::new()
                 .name("walkie-audio".into())
@@ -189,6 +212,7 @@ impl Engine {
                             capture_probe,
                             state,
                             armed,
+                            preference,
                         },
                     );
                 })
@@ -213,6 +237,7 @@ impl Engine {
         Ok(Arc::new(Engine {
             commands,
             slots,
+            preference,
             estimators,
             capture,
             chirps,
@@ -266,8 +291,30 @@ impl Engine {
     }
 
     /// The slot table, for the session manager.
-    pub fn slots(&self) -> &Arc<SlotTable> {
-        &self.slots
+    ///
+    /// Reading it is a pointer swap. Hold the result only for as long as one
+    /// operation, because a device change replaces the table.
+    pub fn slots(&self) -> Arc<SlotTable> {
+        self.slots.load_full()
+    }
+
+    /// Replaces the chosen devices and reopens.
+    ///
+    /// The output stream is rebuilt, which replaces the slot table, so the
+    /// caller must re-activate whoever is in the session afterwards.
+    pub fn set_devices(&self, preference: DevicePreference) {
+        if let Ok(mut guard) = self.preference.lock() {
+            *guard = preference;
+        }
+        let _ = self.commands.send(Command::Reopen);
+    }
+
+    /// The chosen devices.
+    pub fn devices(&self) -> DevicePreference {
+        self.preference
+            .lock()
+            .map(|p| p.clone())
+            .unwrap_or_default()
     }
 
     /// Counters for `walkie doctor`.
@@ -277,8 +324,9 @@ impl Engine {
         let mut late = 0;
         let mut overrun = 0;
 
+        let slots = self.slots();
         for index in 0..MAX_PEERS {
-            let slot = self.slots.slot(index);
+            let slot = slots.slot(index);
             played += slot.played.load(Ordering::Relaxed);
             concealed += slot.concealed.load(Ordering::Relaxed);
             late += slot.late.load(Ordering::Relaxed);
@@ -331,7 +379,8 @@ pub struct Stats {
 
 impl AudioSink for Engine {
     fn deliver(&self, peer: EndpointId, packet: &AudioPacket<'_>) {
-        let Some(index) = self.slots.index_of(peer) else {
+        let slots = self.slots();
+        let Some(index) = slots.index_of(peer) else {
             // The peer is not in the session. Their audio is not wanted, and
             // dropping it here keeps it out of the mix entirely.
             return;
@@ -341,7 +390,7 @@ impl AudioSink for Engine {
             return;
         };
 
-        let slot = self.slots.slot(index);
+        let slot = slots.slot(index);
 
         // Measure arrival spacing here, on the network task, where reading the
         // clock is safe. The callback only reads the published target.
@@ -355,12 +404,13 @@ impl AudioSink for Engine {
     }
 
     fn activate(&self, peer: EndpointId) -> bool {
-        match self.slots.activate(peer) {
+        let slots = self.slots();
+        match slots.activate(peer) {
             Some(index) => {
                 if let Ok(mut estimators) = self.estimators.lock()
                     && let Some(estimator) = estimators.get_mut(index)
                 {
-                    estimator.reset(&self.slots.slot(index).target_frames);
+                    estimator.reset(&slots.slot(index).target_frames);
                 }
                 true
             }
@@ -372,7 +422,7 @@ impl AudioSink for Engine {
     }
 
     fn deactivate(&self, peer: EndpointId) {
-        self.slots.deactivate(peer);
+        self.slots().deactivate(peer);
     }
 }
 
@@ -399,6 +449,7 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
         capture_probe,
         state,
         armed,
+        preference,
     } = ctx;
 
     // The shared capture state outlives any single device open, so its counters
@@ -412,25 +463,15 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
     let mut speaker: Option<playback::Playback> = None;
     let mut output_report: Option<(String, f32, bool, device::EchoRisk)> = None;
 
-    match device::choose(device::Direction::Output) {
-        Ok(output) => {
-            let summary = (
-                output.name.clone(),
-                output.buffer_ms(),
-                output.native_rate,
-                output.echo,
-            );
-            match playback::open(&output, slots.clone(), consumers, chirps.clone()) {
-                Ok(p) => {
-                    speaker = Some(p);
-                    output_report = Some(summary);
-                    state.store(EngineState::Listening as u8, Ordering::Release);
-                }
-                Err(e) => warn!("cannot open the speaker: {e}"),
-            }
-        }
-        Err(e) => warn!("cannot choose a speaker: {e}"),
-    }
+    open_speaker(
+        &slots,
+        consumers,
+        &chirps,
+        &preference,
+        &state,
+        &mut speaker,
+        &mut output_report,
+    );
 
     if speaker.is_none() {
         warn!("walkie is running without audio output. Run `walkie doctor`.");
@@ -444,7 +485,7 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
                 if microphone.is_some() {
                     continue;
                 }
-                match open_microphone(&shared, tx.clone()) {
+                match open_microphone(&shared, tx.clone(), &preference) {
                     Ok((mic, input_summary)) => {
                         if let Ok(mut guard) = report.lock() {
                             *guard = build_report(&input_summary, output_report.as_ref());
@@ -464,7 +505,7 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
                     // Transmitting without an armed microphone is a programming
                     // error, not a user error. Open it rather than go silent.
                     warn!("transmit was requested before the microphone was armed");
-                    if let Ok((mic, _)) = open_microphone(&shared, tx.clone()) {
+                    if let Ok((mic, _)) = open_microphone(&shared, tx.clone(), &preference) {
                         microphone = Some(mic);
                         armed.store(true, Ordering::Release);
                     }
@@ -501,13 +542,44 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
 
             Command::Chirp(chirp) => chirps.play(chirp),
 
+            Command::Reopen => {
+                // The microphone picks up its preference the next time it
+                // opens, which is the next conversation. The speaker is open
+                // all the time, so it has to be rebuilt now.
+                //
+                // Rebuilding replaces the slot table, because the output
+                // callback owns the read side of every packet queue. Whoever
+                // is in the session must be activated again on the new table,
+                // which the application does when this returns.
+                drop(speaker.take());
+
+                let (table, fresh) = SlotTable::new();
+                slots.store(Arc::new(table));
+
+                open_speaker(
+                    &slots,
+                    fresh,
+                    &chirps,
+                    &preference,
+                    &state,
+                    &mut speaker,
+                    &mut output_report,
+                );
+
+                if let Some(mic) = microphone.take() {
+                    mic.close();
+                    armed.store(false, Ordering::Release);
+                }
+                info!("reopened the audio devices");
+            }
+
             Command::Shutdown => {
                 shared.transmitting.store(false, Ordering::Relaxed);
                 if let Some(mic) = microphone.take() {
                     mic.close();
                 }
                 armed.store(false, Ordering::Release);
-                slots.clear();
+                slots.load().clear();
                 drop(speaker);
                 state.store(EngineState::Idle as u8, Ordering::Release);
                 return;
@@ -518,7 +590,7 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
 
 /// What the audio thread needs to run. Bundled so the signature stays legible.
 struct ThreadContext {
-    slots: Arc<SlotTable>,
+    slots: Arc<arc_swap::ArcSwap<SlotTable>>,
     consumers: Vec<packet::PacketConsumer>,
     chirps: Arc<ChirpPlayer>,
     tx: Arc<dyn AudioTx>,
@@ -526,6 +598,44 @@ struct ThreadContext {
     capture_probe: Arc<std::sync::Mutex<Option<Arc<capture::CaptureShared>>>>,
     state: Arc<std::sync::atomic::AtomicU8>,
     armed: Arc<AtomicBool>,
+    preference: Arc<std::sync::Mutex<DevicePreference>>,
+}
+
+/// Opens the speaker and records what was chosen.
+///
+/// A machine with no usable output still runs. Seeing who is online is useful
+/// even when nothing can be heard, and the fault is reported by `doctor`.
+#[allow(clippy::too_many_arguments)]
+fn open_speaker(
+    slots: &Arc<arc_swap::ArcSwap<SlotTable>>,
+    consumers: Vec<packet::PacketConsumer>,
+    chirps: &Arc<ChirpPlayer>,
+    preference: &Arc<std::sync::Mutex<DevicePreference>>,
+    state: &Arc<std::sync::atomic::AtomicU8>,
+    speaker: &mut Option<playback::Playback>,
+    report: &mut Option<(String, f32, bool, device::EchoRisk)>,
+) {
+    let wanted = preference.lock().ok().and_then(|p| p.output.clone());
+
+    match device::choose(device::Direction::Output, wanted.as_deref()) {
+        Ok(output) => {
+            let summary = (
+                output.name.clone(),
+                output.buffer_ms(),
+                output.native_rate,
+                output.echo,
+            );
+            match playback::open(&output, slots.load_full(), consumers, chirps.clone()) {
+                Ok(p) => {
+                    *speaker = Some(p);
+                    *report = Some(summary);
+                    state.store(EngineState::Listening as u8, Ordering::Release);
+                }
+                Err(e) => warn!("cannot open the speaker: {e}"),
+            }
+        }
+        Err(e) => warn!("cannot choose a speaker: {e}"),
+    }
 }
 
 /// The microphone while it is open.
@@ -551,8 +661,10 @@ impl OpenMicrophone {
 fn open_microphone(
     shared: &Arc<capture::CaptureShared>,
     tx: Arc<dyn AudioTx>,
+    preference: &Arc<std::sync::Mutex<DevicePreference>>,
 ) -> Result<(OpenMicrophone, (String, f32, bool))> {
-    let input = device::choose(device::Direction::Input)?;
+    let wanted = preference.lock().ok().and_then(|p| p.input.clone());
+    let input = device::choose(device::Direction::Input, wanted.as_deref())?;
     let summary = (input.name.clone(), input.buffer_ms(), input.native_rate);
 
     let (capture, frames) = capture::open(&input, shared.clone())?;

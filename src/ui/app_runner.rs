@@ -19,6 +19,7 @@ use objc2_foundation::{MainThreadMarker, NSObject, NSObjectProtocol, NSString, N
 use tracing::{info, warn};
 
 use crate::app::App;
+use crate::audio::device::Direction;
 use crate::config::UI_REDRAW_HZ;
 use crate::error::Result;
 use crate::state::StateHandle;
@@ -37,9 +38,13 @@ pub enum Command {
     EndSession,
     ToggleMute,
     ToggleDnd,
-    Arm,
     /// Close the microphone, but only if no session is using it.
     DisarmIfIdle,
+    /// Choose an audio device. `None` follows the system default.
+    SetDevice {
+        direction: Direction,
+        name: Option<String>,
+    },
     AddTicket(String),
     ApproveFirst,
     RejectFirst,
@@ -233,8 +238,6 @@ impl Ui {
 
     fn on_shortcut(&self, shortcut: Shortcut) {
         match shortcut {
-            // Opening the panel arms the microphone. The devices start while
-            // the user is still choosing a number, so the first word survives.
             Shortcut::Talk => self.show_panel(),
             Shortcut::Drop => {
                 self.send(Command::EndSession);
@@ -244,24 +247,28 @@ impl Ui {
         }
     }
 
-    /// Hides the panel, and closes the microphone if it is not being used.
+    /// Hides the panel.
     ///
-    /// Opening the panel arms the microphone so the first word survives the
-    /// device start. Closing it without talking to anyone must undo that, or
-    /// the microphone stays open for the life of the process.
+    /// The disarm request is a safety net rather than the main path. The panel
+    /// does not open the microphone, so there is usually nothing to close, but
+    /// a session that ended while the panel was open would otherwise leave the
+    /// device running until the idle timer noticed.
     fn close_panel(&self) {
         self.panel.hide();
         self.send(Command::DisarmIfIdle);
     }
 
-    /// Opens the panel and arms the microphone.
+    /// Opens the panel.
     ///
-    /// Arming belongs here rather than in the callers. Every way of opening the
-    /// panel must arm, and every way of closing it must disarm, so pairing the
-    /// two in one place is what keeps the microphone from being left open.
+    /// The panel does **not** open the microphone. Looking at the roster is not
+    /// talking, and an input device opened for a glance is an input device left
+    /// open. Only a conversation opens the microphone: either you press a
+    /// digit, or a contact opens one with you.
+    ///
+    /// The cost is that the very start of the first word can be clipped while
+    /// CoreAudio starts the device. That is the right trade: a clipped syllable
+    /// is a small annoyance, and a microphone open for no reason is not.
     fn show_panel(&self) {
-        self.send(Command::Arm);
-
         let app = NSApplication::sharedApplication(self.mtm);
         // A borderless panel in an accessory application does not get key
         // focus unless the application is activated first.
@@ -334,12 +341,38 @@ impl Ui {
             MenuAction::ToggleDnd => self.send(Command::ToggleDnd),
             MenuAction::EndSession => self.send(Command::EndSession),
             MenuAction::CopyKey => self.copy_key(),
+            MenuAction::ChooseInput(index) => self.choose_device(Direction::Input, Some(index)),
+            MenuAction::ChooseOutput(index) => self.choose_device(Direction::Output, Some(index)),
+            MenuAction::ResetDevices => {
+                self.choose_device(Direction::Input, None);
+                self.choose_device(Direction::Output, None);
+            }
             MenuAction::Quit => {
                 self.send(Command::Quit);
                 let app = NSApplication::sharedApplication(self.mtm);
                 app.terminate(None);
             }
         }
+    }
+
+    /// Applies a device chosen from the menu.
+    ///
+    /// The menu carries a position rather than a name, so the list is read
+    /// again here. If a device disappeared between the menu opening and the
+    /// click, the position no longer resolves and nothing happens, which is
+    /// better than switching to whatever moved into that slot.
+    fn choose_device(&self, direction: Direction, index: Option<usize>) {
+        let name = match index {
+            None => None,
+            Some(index) => match crate::audio::device::names(direction).get(index) {
+                Some(name) => Some(name.clone()),
+                None => {
+                    warn!("that device is no longer here");
+                    return;
+                }
+            },
+        };
+        self.send(Command::SetDevice { direction, name });
     }
 
     fn copy_key(&self) {
@@ -369,8 +402,12 @@ async fn handle_commands(app: Arc<App>, mut rx: tokio::sync::mpsc::UnboundedRece
                 let dnd = !app.dnd().await;
                 app.set_dnd(dnd).await;
             }
-            Command::Arm => app.arm(),
             Command::DisarmIfIdle => app.disarm_if_idle().await,
+            Command::SetDevice { direction, name } => {
+                if let Err(e) = app.set_device(direction, name.as_deref()).await {
+                    warn!("cannot change the audio device: {e}");
+                }
+            }
             Command::AddTicket(ticket) => {
                 if let Err(e) = app.add_contact(&ticket, None).await {
                     warn!("cannot add that key: {e}");
