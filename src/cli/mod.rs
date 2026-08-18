@@ -180,6 +180,128 @@ pub fn set_slot(who: &str, slot: u8) -> Result<()> {
     Ok(())
 }
 
+/// `walkie devices`
+pub fn devices(input: Option<&str>, output: Option<&str>, reset: bool) -> Result<()> {
+    use crate::audio::device::{self, Direction};
+    use crate::store::{SETTING_INPUT_DEVICE, SETTING_OUTPUT_DEVICE};
+
+    let store = Store::open()?;
+
+    if reset {
+        store.set_setting(SETTING_INPUT_DEVICE, None)?;
+        store.set_setting(SETTING_OUTPUT_DEVICE, None)?;
+        println!("\n  both devices follow the system default again\n");
+        return Ok(());
+    }
+
+    let mut changed = false;
+
+    for (wanted, direction, key) in [
+        (input, Direction::Input, SETTING_INPUT_DEVICE),
+        (output, Direction::Output, SETTING_OUTPUT_DEVICE),
+    ] {
+        let Some(wanted) = wanted else { continue };
+
+        let available = device::names(direction);
+        let chosen = resolve_device(wanted, &available)?;
+
+        store.set_setting(key, Some(&chosen))?;
+        println!("\n  {direction:?} device set to {chosen}");
+        changed = true;
+    }
+
+    if changed {
+        println!("\n  Restart walkie, or it applies on the next conversation.\n");
+        return Ok(());
+    }
+
+    // No change asked for, so list what there is.
+    let current_in = store.setting(SETTING_INPUT_DEVICE)?;
+    let current_out = store.setting(SETTING_OUTPUT_DEVICE)?;
+
+    for (direction, current) in [
+        (Direction::Input, &current_in),
+        (Direction::Output, &current_out),
+    ] {
+        println!();
+        println!(
+            "{}",
+            box_line::label(&format!("{direction:?}").to_uppercase())
+        );
+        println!();
+
+        let names = device::names(direction);
+        if names.is_empty() {
+            println!("    none");
+            continue;
+        }
+
+        let default = device::default_name(direction);
+        let mut table = Table::new(["", "N", "DEVICE", ""]);
+
+        for (index, name) in names.iter().enumerate() {
+            let in_use = match current {
+                Some(chosen) => chosen == name,
+                None => default.as_deref() == Some(name.as_str()),
+            };
+            table.row([
+                if in_use { "*".into() } else { " ".into() },
+                (index + 1).to_string(),
+                name.clone(),
+                if current.is_none() && default.as_deref() == Some(name.as_str()) {
+                    "system default".into()
+                } else {
+                    String::new()
+                },
+            ]);
+        }
+        table.print("  ");
+    }
+
+    println!();
+    println!("  Choose one by number or by name:");
+    println!("      walkie devices --in 2 --out \"External Headphones\"");
+    println!("      walkie devices --reset");
+    println!();
+    Ok(())
+}
+
+/// Turns a number or a name fragment into a device name.
+fn resolve_device(wanted: &str, available: &[String]) -> Result<String> {
+    if available.is_empty() {
+        return Err(Error::Audio("this machine reports no such devices".into()));
+    }
+
+    if let Ok(number) = wanted.parse::<usize>()
+        && number >= 1
+        && number <= available.len()
+    {
+        return Ok(available[number - 1].clone());
+    }
+
+    let lower = wanted.to_lowercase();
+    let matches: Vec<&String> = available
+        .iter()
+        .filter(|name| name.to_lowercase().contains(&lower))
+        .collect();
+
+    match matches.len() {
+        1 => Ok(matches[0].clone()),
+        0 => Err(Error::Audio(format!(
+            "no device matches {wanted:?}. Run `walkie devices` to list them."
+        ))),
+        _ => Err(Error::Audio(format!(
+            "{wanted:?} matches {} devices: {}",
+            matches.len(),
+            matches
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))),
+    }
+}
+
 /// `walkie approve <key>`
 pub fn approve(who: &str, name: Option<&str>) -> Result<()> {
     let store = Store::open()?;

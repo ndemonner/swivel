@@ -34,6 +34,12 @@ pub enum MenuAction {
     EndSession,
     CopyKey,
     Quit,
+    /// Choose the input device at this position in `device::names(Input)`.
+    ChooseInput(usize),
+    /// Choose the output device at this position in `device::names(Output)`.
+    ChooseOutput(usize),
+    /// Follow the system defaults again.
+    ResetDevices,
 }
 
 pub struct TargetIvars {
@@ -112,8 +118,35 @@ define_class!(
         fn quit(&self, _sender: Option<&AnyObject>) {
             (self.ivars().actions)(MenuAction::Quit);
         }
+
+        /// The tag carries the device's position in the list the menu was
+        /// built from.
+        #[unsafe(method(chooseInput:))]
+        fn choose_input(&self, sender: Option<&AnyObject>) {
+            if let Some(index) = tag_of(sender) {
+                (self.ivars().actions)(MenuAction::ChooseInput(index));
+            }
+        }
+
+        #[unsafe(method(chooseOutput:))]
+        fn choose_output(&self, sender: Option<&AnyObject>) {
+            if let Some(index) = tag_of(sender) {
+                (self.ivars().actions)(MenuAction::ChooseOutput(index));
+            }
+        }
+
+        #[unsafe(method(resetDevices:))]
+        fn reset_devices(&self, _sender: Option<&AnyObject>) {
+            (self.ivars().actions)(MenuAction::ResetDevices);
+        }
     }
 );
+
+/// Reads the tag from a menu item that sent an action.
+fn tag_of(sender: Option<&AnyObject>) -> Option<usize> {
+    let item: &NSMenuItem = unsafe { std::mem::transmute(sender?) };
+    usize::try_from(item.tag()).ok()
+}
 
 impl MenuTarget {
     fn new(mtm: MainThreadMarker, actions: Rc<dyn Fn(MenuAction)>) -> Retained<Self> {
@@ -150,9 +183,10 @@ impl StatusItem {
             button.setFont(Some(&style::mono(11.0)));
         }
 
-        // The menu is built now but attached only for the instant it is shown.
-        // Attaching it permanently would make a left click open the menu
-        // instead of the roster.
+        // The menu is rebuilt each time it is shown, because the device list
+        // changes when headphones are plugged in. It is attached only for the
+        // instant it is shown: attaching it permanently would make a left click
+        // open the menu instead of the roster.
         let menu = Self::build_menu(mtm, &target);
 
         StatusItem {
@@ -197,6 +231,18 @@ impl StatusItem {
             }
         }
 
+        // The device submenu goes above "Copy my key".
+        let devices = unsafe {
+            NSMenuItem::initWithTitle_action_keyEquivalent(
+                NSMenuItem::alloc(mtm),
+                &NSString::from_str("Audio devices"),
+                None,
+                &NSString::from_str(""),
+            )
+        };
+        menu.setSubmenu_forItem(Some(&Self::build_devices_menu(mtm, target)), &devices);
+        menu.insertItem_atIndex(&devices, (menu.numberOfItems() - 2).max(0));
+
         menu
     }
 
@@ -206,11 +252,70 @@ impl StatusItem {
     /// other way to show a menu on demand, and leaving it attached would make
     /// every left click open the menu instead of the roster.
     pub fn show_menu(&self) {
-        self.item.setMenu(Some(&self.menu));
+        // Rebuild first. A device list from a minute ago is often wrong.
+        let fresh = Self::build_menu(self.mtm, &self.target);
+        self.item.setMenu(Some(&fresh));
         if let Some(button) = self.item.button(self.mtm) {
             unsafe { button.performClick(None) };
         }
         self.item.setMenu(None);
+    }
+
+    /// Builds the audio device submenu.
+    ///
+    /// The system default is offered first, so a user who changed a device by
+    /// accident has an obvious way back.
+    fn build_devices_menu(mtm: MainThreadMarker, target: &MenuTarget) -> Retained<NSMenu> {
+        use crate::audio::device::{self, Direction};
+
+        let menu = NSMenu::new(mtm);
+
+        let reset = unsafe {
+            NSMenuItem::initWithTitle_action_keyEquivalent(
+                NSMenuItem::alloc(mtm),
+                &NSString::from_str("Use the system defaults"),
+                Some(sel!(resetDevices:)),
+                &NSString::from_str(""),
+            )
+        };
+        unsafe { reset.setTarget(Some(target)) };
+        menu.addItem(&reset);
+
+        for (direction, action, label) in [
+            (Direction::Input, sel!(chooseInput:), "Microphone"),
+            (Direction::Output, sel!(chooseOutput:), "Speaker"),
+        ] {
+            menu.addItem(&NSMenuItem::separatorItem(mtm));
+
+            let header = unsafe {
+                NSMenuItem::initWithTitle_action_keyEquivalent(
+                    NSMenuItem::alloc(mtm),
+                    &NSString::from_str(label),
+                    None,
+                    &NSString::from_str(""),
+                )
+            };
+            header.setEnabled(false);
+            menu.addItem(&header);
+
+            for (index, name) in device::names(direction).into_iter().enumerate() {
+                let item = unsafe {
+                    NSMenuItem::initWithTitle_action_keyEquivalent(
+                        NSMenuItem::alloc(mtm),
+                        &NSString::from_str(&format!("   {name}")),
+                        Some(action),
+                        &NSString::from_str(""),
+                    )
+                };
+                unsafe {
+                    item.setTarget(Some(target));
+                    item.setTag(index as isize);
+                }
+                menu.addItem(&item);
+            }
+        }
+
+        menu
     }
 
     /// Updates the icon from a snapshot.

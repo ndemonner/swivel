@@ -89,16 +89,16 @@ before you touch it.
   - Note: there is deliberately no tone when the microphone opens or closes.
     Opening a microphone must feel seamless. See DESIGN.md §7.
 - [ ] **T-048** Input and output level meters for the roster
-- [ ] **T-049** Device change handling. Rebuild streams when the default device
+- [x] **T-049** Device change handling. Rebuild streams when the default device
   changes.
-- [ ] **T-050** Choose the input and output device, rather than always using the
+- [x] **T-050** Choose the input and output device, rather than always using the
   system default
   - Accept: `walkie devices` lists them. `walkie devices --in <n> --out <n>`
     sets them.
   - Accept: the choice is stored in the `settings` table and survives a restart.
   - Accept: a stored device that has gone away falls back to the system default
     and says so, rather than failing to start.
-- [ ] **T-051** Device submenu in the menu bar, with a tick against the device in
+- [x] **T-051** Device submenu in the menu bar, with a tick against the device in
   use
   - Accept: changing a device rebuilds the stream without dropping the session.
 

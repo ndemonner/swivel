@@ -7,7 +7,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::audio::{Engine, NullTx, device};
+use crate::audio::{DevicePreference, Engine, NullTx, device};
 use crate::config::{
     DEVICE_BUFFER_FRAMES, FRAME_MS, JITTER_START_FRAMES, MAX_PACKET_BYTES, OPUS_BITRATE,
     OPUS_COMPLEXITY, SAMPLE_RATE,
@@ -108,7 +108,7 @@ fn device_check(faults: &mut Vec<String>) {
         (device::Direction::Input, "microphone"),
         (device::Direction::Output, "speaker"),
     ] {
-        match device::choose(direction) {
+        match device::choose(direction, None) {
             Ok(chosen) => {
                 println!();
                 println!("    default {label}");
@@ -201,7 +201,7 @@ fn engine_check(faults: &mut Vec<String>) -> Option<Arc<Engine>> {
     println!();
     println!("  ENGINE");
 
-    let engine = match Engine::start(Arc::new(NullTx)) {
+    let engine = match Engine::start(Arc::new(NullTx), DevicePreference::default()) {
         Ok(e) => e,
         Err(e) => {
             faults.push(format!("the audio engine will not start: {e}"));

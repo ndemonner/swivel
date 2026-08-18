@@ -51,15 +51,29 @@ impl Chosen {
     }
 }
 
-/// Picks the default device for a direction and works out how to open it.
-pub fn choose(direction: Direction) -> Result<Chosen> {
+/// Picks a device for a direction and works out how to open it.
+///
+/// `preferred` names a device the user chose. A name that no longer matches
+/// anything falls back to the system default and says so, because a device that
+/// went away must not stop the application from starting.
+pub fn choose(direction: Direction, preferred: Option<&str>) -> Result<Chosen> {
     let host = cpal::default_host();
 
-    let device = match direction {
-        Direction::Input => host.default_input_device(),
-        Direction::Output => host.default_output_device(),
-    }
-    .ok_or_else(|| Error::Audio(format!("there is no default {direction:?} device")))?;
+    let device = preferred
+        .and_then(|name| find_by_name(&host, direction, name))
+        .or_else(|| {
+            if let Some(name) = preferred {
+                tracing::warn!(
+                    "the chosen {direction:?} device {name:?} is not here, so the system \
+                     default is used"
+                );
+            }
+            match direction {
+                Direction::Input => host.default_input_device(),
+                Direction::Output => host.default_output_device(),
+            }
+        })
+        .ok_or_else(|| Error::Audio(format!("there is no {direction:?} device")))?;
 
     let description = device.description().map_err(Error::audio)?;
     let name = description.name().to_string();
@@ -139,6 +153,47 @@ fn pick_buffer_size(supported: &SupportedBufferSize) -> BufferSize {
         // unknown delay in `walkie doctor`.
         _ => BufferSize::Default,
     }
+}
+
+/// Finds a device by its exact name.
+fn find_by_name(host: &cpal::Host, direction: Direction, name: &str) -> Option<Device> {
+    let devices = match direction {
+        Direction::Input => host.input_devices().ok()?,
+        Direction::Output => host.output_devices().ok()?,
+    };
+
+    devices.into_iter().find(|d| {
+        d.description()
+            .map(|desc| desc.name() == name)
+            .unwrap_or(false)
+    })
+}
+
+/// Every device name for a direction, in the order the host reports them.
+pub fn names(direction: Direction) -> Vec<String> {
+    let host = cpal::default_host();
+    let devices = match direction {
+        Direction::Input => host.input_devices().ok(),
+        Direction::Output => host.output_devices().ok(),
+    };
+
+    devices
+        .map(|list| {
+            list.into_iter()
+                .filter_map(|d| d.description().ok().map(|desc| desc.name().to_string()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The name of the current system default for a direction.
+pub fn default_name(direction: Direction) -> Option<String> {
+    let host = cpal::default_host();
+    let device = match direction {
+        Direction::Input => host.default_input_device(),
+        Direction::Output => host.default_output_device(),
+    }?;
+    device.description().ok().map(|d| d.name().to_string())
 }
 
 /// Lists every device, for `walkie doctor`.

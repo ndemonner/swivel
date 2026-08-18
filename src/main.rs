@@ -65,6 +65,18 @@ enum Command {
     Block { who: String },
     /// Move a contact to a different slot.
     Slot { who: String, slot: u8 },
+    /// List audio devices, or choose one.
+    Devices {
+        /// The input device, by number or by name.
+        #[arg(long = "in")]
+        input: Option<String>,
+        /// The output device, by number or by name.
+        #[arg(long = "out")]
+        output: Option<String>,
+        /// Follow the system default again.
+        #[arg(long)]
+        reset: bool,
+    },
     /// Check audio devices, permission, and connectivity.
     Doctor {
         /// Measure real mouth-to-ear latency through the device stack.
@@ -121,6 +133,11 @@ fn run() -> Result<()> {
         Some(Command::Slot { who, slot }) => cli::set_slot(&who, slot),
         Some(Command::Approve { who, name }) => cli::approve(&who, name.as_deref()),
         Some(Command::Block { who }) => cli::block(&who),
+        Some(Command::Devices {
+            input,
+            output,
+            reset,
+        }) => cli::devices(input.as_deref(), output.as_deref(), reset),
         Some(Command::Doctor { loopback, tune }) => cli::doctor::run(loopback, tune),
         Some(Command::Tui) => cli::tui::run(),
         #[cfg(target_os = "macos")]

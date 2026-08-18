@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
-use crate::audio::{AudioSink, Engine};
+use crate::audio::{AudioSink, DevicePreference, Engine};
 use crate::config;
 use crate::error::Result;
 use crate::net::control::{self, Control};
@@ -92,7 +92,12 @@ impl App {
         let endpoint = crate::net::bind(identity.secret_key.clone()).await?;
 
         let tx = Arc::new(SessionTx::new());
-        let engine = match Engine::start(tx.clone()) {
+        let devices = DevicePreference {
+            input: store.setting(crate::store::SETTING_INPUT_DEVICE)?,
+            output: store.setting(crate::store::SETTING_OUTPUT_DEVICE)?,
+        };
+
+        let engine = match Engine::start(tx.clone(), devices) {
             Ok(engine) => Some(engine),
             Err(e) => {
                 warn!("running without audio: {e}");
@@ -188,11 +193,12 @@ impl App {
     // Sessions
     // -----------------------------------------------------------------------
 
-    /// Opens the audio devices without transmitting.
+    /// Opens the microphone.
     ///
-    /// Call this when the panel opens, before a contact is chosen. A CoreAudio
-    /// device takes tens of milliseconds to start, and paying that while the
-    /// user is still deciding is what makes the first word survive.
+    /// This is called when a conversation starts, and only then. Two things
+    /// start one: the user presses a digit, or a contact opens a session with
+    /// this machine. Opening the panel does not, because looking at the roster
+    /// is not talking.
     pub fn arm(&self) {
         if let Some(engine) = &self.engine {
             engine.arm();
@@ -249,6 +255,59 @@ impl App {
     /// True while the input device is open.
     pub fn mic_is_open(&self) -> bool {
         self.engine.as_ref().is_some_and(|e| e.armed())
+    }
+
+    /// The devices in use.
+    pub fn devices(&self) -> DevicePreference {
+        self.engine
+            .as_ref()
+            .map(|e| e.devices())
+            .unwrap_or_default()
+    }
+
+    /// Chooses an input or output device and reopens the audio path.
+    ///
+    /// `None` returns that direction to the system default.
+    pub async fn set_device(
+        &self,
+        direction: crate::audio::device::Direction,
+        name: Option<&str>,
+    ) -> Result<()> {
+        use crate::audio::device::Direction;
+
+        let key = match direction {
+            Direction::Input => crate::store::SETTING_INPUT_DEVICE,
+            Direction::Output => crate::store::SETTING_OUTPUT_DEVICE,
+        };
+        self.store.lock().await.set_setting(key, name)?;
+
+        let Some(engine) = &self.engine else {
+            return Ok(());
+        };
+
+        let mut wanted = engine.devices();
+        match direction {
+            Direction::Input => wanted.input = name.map(str::to_string),
+            Direction::Output => wanted.output = name.map(str::to_string),
+        }
+        engine.set_devices(wanted);
+
+        // Reopening the speaker replaces the slot table, so everyone in the
+        // session has to be put back on the new one or their audio stops.
+        let members = {
+            let guard = self.session.lock().await;
+            guard
+                .as_ref()
+                .map(|s| s.members.iter().copied().collect::<Vec<_>>())
+                .unwrap_or_default()
+        };
+        for peer in members {
+            self.audio.activate(peer);
+        }
+
+        self.publish_session().await;
+        self.refresh_ui().await;
+        Ok(())
     }
 
     /// Adds or removes a contact by slot number. This is the digit press.

@@ -151,6 +151,43 @@ fn restrict_permissions(_path: &std::path::Path) -> Result<()> {
     Ok(())
 }
 
+impl Store {
+    /// Reads a setting.
+    pub fn setting(&self, key: &str) -> Result<Option<String>> {
+        use rusqlite::OptionalExtension;
+        self.conn()
+            .query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| {
+                row.get(0)
+            })
+            .optional()
+            .map_err(Error::from)
+    }
+
+    /// Writes a setting. `None` removes it.
+    pub fn set_setting(&self, key: &str, value: Option<&str>) -> Result<()> {
+        match value {
+            Some(value) => {
+                self.conn().execute(
+                    "INSERT INTO settings (key, value) VALUES (?1, ?2) \
+                     ON CONFLICT(key) DO UPDATE SET value = ?2",
+                    rusqlite::params![key, value],
+                )?;
+            }
+            None => {
+                self.conn()
+                    .execute("DELETE FROM settings WHERE key = ?1", [key])?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The setting that names the preferred input device.
+pub const SETTING_INPUT_DEVICE: &str = "input_device";
+
+/// The setting that names the preferred output device.
+pub const SETTING_OUTPUT_DEVICE: &str = "output_device";
+
 /// Seconds since the Unix epoch. The database stores every time this way.
 pub fn now_secs() -> i64 {
     std::time::SystemTime::now()
@@ -162,6 +199,22 @@ pub fn now_secs() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_setting_round_trips_and_clears() {
+        let store = Store::open_memory().unwrap();
+        assert_eq!(store.setting("x").unwrap(), None);
+
+        store.set_setting("x", Some("one")).unwrap();
+        assert_eq!(store.setting("x").unwrap().as_deref(), Some("one"));
+
+        // Writing twice must update, not fail on the primary key.
+        store.set_setting("x", Some("two")).unwrap();
+        assert_eq!(store.setting("x").unwrap().as_deref(), Some("two"));
+
+        store.set_setting("x", None).unwrap();
+        assert_eq!(store.setting("x").unwrap(), None);
+    }
 
     #[test]
     fn migrate_is_idempotent() {
