@@ -14,6 +14,7 @@ pub mod jitter;
 pub mod packet;
 pub mod playback;
 pub mod resample;
+pub mod vpio;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -115,7 +116,15 @@ enum Command {
     /// CoreAudio device takes tens of milliseconds to start, which would
     /// otherwise clip the first word. The panel arms on open, so the cost is
     /// paid while the user is still choosing who to talk to.
-    Arm,
+    Arm {
+        /// Fresh read sides for the peer queues.
+        ///
+        /// Starting the voice unit replaces the whole audio path, and the
+        /// output callback owns the read side of every queue, so a new path
+        /// needs a new table. The caller swaps the table before sending this,
+        /// so anything it activates afterwards lands on the new one.
+        consumers: Vec<packet::PacketConsumer>,
+    },
     /// Start transmitting. The microphone must already be armed.
     Transmit(bool),
     /// Close the microphone.
@@ -123,10 +132,14 @@ enum Command {
     /// The speaker is never closed. This is an intercom: a contact must be able
     /// to reach you at any moment, so the output stream runs for the life of
     /// the process.
-    Disarm,
+    Disarm {
+        consumers: Vec<packet::PacketConsumer>,
+    },
     Chirp(Chirp),
     /// Close and reopen the devices, picking up a changed preference.
-    Reopen,
+    Reopen {
+        consumers: Vec<packet::PacketConsumer>,
+    },
     Shutdown,
 }
 
@@ -150,10 +163,15 @@ pub struct Engine {
     preference: Arc<std::sync::Mutex<DevicePreference>>,
     /// The peer slots.
     ///
-    /// This is swapped when the output device is reopened. The callback owns
-    /// the read side of every packet queue, so a new stream needs new queues,
-    /// and therefore a new table. Everything else reads it through the swap.
+    /// This is swapped whenever the audio path is rebuilt. The output callback
+    /// owns the read side of every packet queue, so a new path needs new
+    /// queues, and therefore a new table. Everything else reads it through the
+    /// swap.
     slots: Arc<arc_swap::ArcSwap<SlotTable>>,
+    /// True while the voice unit is running and cancelling echo.
+    cancelling: Arc<AtomicBool>,
+    /// Whether echo cancellation should be used at all.
+    want_cancelling: Arc<AtomicBool>,
 }
 
 /// What the engine found when it opened the devices.
@@ -170,7 +188,11 @@ pub struct DeviceReport {
 
 impl Engine {
     /// Starts the audio thread. The devices stay closed until `arm` is called.
-    pub fn start(tx: Arc<dyn AudioTx>, preference: DevicePreference) -> Result<Arc<Self>> {
+    pub fn start(
+        tx: Arc<dyn AudioTx>,
+        preference: DevicePreference,
+        echo_cancellation: bool,
+    ) -> Result<Arc<Self>> {
         let (slot_table, consumers) = SlotTable::new();
         let preference = Arc::new(std::sync::Mutex::new(preference));
         let slots: Arc<arc_swap::ArcSwap<SlotTable>> =
@@ -179,6 +201,8 @@ impl Engine {
         let report = Arc::new(std::sync::Mutex::new(None));
         let state = Arc::new(std::sync::atomic::AtomicU8::new(EngineState::Idle as u8));
         let armed = Arc::new(AtomicBool::new(false));
+        let cancelling = Arc::new(AtomicBool::new(false));
+        let want_cancelling = Arc::new(AtomicBool::new(echo_cancellation));
 
         let estimators = Arc::new(std::sync::Mutex::new(
             (0..MAX_PEERS).map(|_| Estimator::new()).collect::<Vec<_>>(),
@@ -198,6 +222,8 @@ impl Engine {
             let armed = armed.clone();
             let preference = preference.clone();
             let slots = slots.clone();
+            let cancelling = cancelling.clone();
+            let want_cancelling = want_cancelling.clone();
 
             std::thread::Builder::new()
                 .name("swivel-audio".into())
@@ -214,6 +240,8 @@ impl Engine {
                             state,
                             armed,
                             preference,
+                            cancelling,
+                            want_cancelling,
                         },
                     );
                 })
@@ -245,6 +273,8 @@ impl Engine {
             report,
             state,
             armed,
+            cancelling,
+            want_cancelling,
         }))
     }
 
@@ -253,12 +283,44 @@ impl Engine {
     /// Call this when the user opens the panel, before any contact is chosen.
     /// The device start cost is then paid while the user is still deciding.
     pub fn arm(&self) {
-        let _ = self.commands.send(Command::Arm);
+        let _ = self.commands.send(Command::Arm {
+            consumers: self.swap_slots(),
+        });
     }
 
-    /// Closes both devices.
+    /// Closes the microphone and returns to listening only.
     pub fn disarm(&self) {
-        let _ = self.commands.send(Command::Disarm);
+        let _ = self.commands.send(Command::Disarm {
+            consumers: self.swap_slots(),
+        });
+    }
+
+    /// Installs a fresh slot table and returns the read sides for the audio
+    /// thread.
+    ///
+    /// This runs on the caller's thread, before the command is sent, so that a
+    /// caller which activates a peer straight afterwards lands on the new
+    /// table rather than the one about to be thrown away.
+    fn swap_slots(&self) -> Vec<packet::PacketConsumer> {
+        let (table, consumers) = SlotTable::new();
+        self.slots.store(Arc::new(table));
+        consumers
+    }
+
+    /// True when the audio path is cancelling echo.
+    pub fn echo_cancelling(&self) -> bool {
+        self.cancelling.load(Ordering::Acquire)
+    }
+
+    /// Turns echo cancellation on or off. It takes effect on the next
+    /// conversation.
+    pub fn set_echo_cancellation(&self, on: bool) {
+        self.want_cancelling.store(on, Ordering::Release);
+    }
+
+    /// True when echo cancellation is wanted, whether or not it is running.
+    pub fn wants_echo_cancellation(&self) -> bool {
+        self.want_cancelling.load(Ordering::Acquire)
     }
 
     /// Opens or closes the microphone. The devices must already be armed.
@@ -307,7 +369,9 @@ impl Engine {
         if let Ok(mut guard) = self.preference.lock() {
             *guard = preference;
         }
-        let _ = self.commands.send(Command::Reopen);
+        let _ = self.commands.send(Command::Reopen {
+            consumers: self.swap_slots(),
+        });
     }
 
     /// The chosen devices.
@@ -451,6 +515,8 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
         state,
         armed,
         preference,
+        cancelling,
+        want_cancelling,
     } = ctx;
 
     // The shared capture state outlives any single device open, so its counters
@@ -478,45 +544,70 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
         warn!("swivel is running without audio output. Run `swivel doctor`.");
     }
 
+    // The audio path is in one of two shapes.
+    //
+    //   Listening: a plain output stream. The speaker is open and the
+    //   microphone is shut, which is the idle state of an intercom.
+    //
+    //   Talking: one Voice Processing unit doing both directions. It cancels
+    //   echo, which it can only do by owning the speaker as well, because the
+    //   canceller needs the signal that was played in order to subtract it.
+    //
+    // Switching shape replaces the whole path, which is why every command that
+    // switches carries a fresh set of queue consumers.
     let mut microphone: Option<OpenMicrophone> = None;
+    let mut voice: Option<vpio::VoiceUnit> = None;
 
     while let Ok(command) = commands.recv() {
         match command {
-            Command::Arm => {
-                if microphone.is_some() {
-                    continue;
+            Command::Arm { consumers } => {
+                if voice.is_some() || microphone.is_some() {
+                    // Already talking. The caller swapped the table, so the
+                    // path has to be rebuilt on the new one regardless.
+                    drop(voice.take());
+                    if let Some(mic) = microphone.take() {
+                        mic.close();
+                    }
                 }
-                match open_microphone(&shared, tx.clone(), &preference) {
-                    Ok((mic, input_summary)) => {
-                        if let Ok(mut guard) = report.lock() {
-                            *guard = build_report(&input_summary, output_report.as_ref());
-                        }
-                        microphone = Some(mic);
+                drop(speaker.take());
+
+                let want = want_cancelling.load(Ordering::Acquire);
+                let outcome = start_talking(
+                    want,
+                    consumers,
+                    &slots,
+                    &chirps,
+                    &shared,
+                    &preference,
+                    &tx,
+                    &mut voice,
+                    &mut microphone,
+                    &mut speaker,
+                    &mut output_report,
+                    &report,
+                    &state,
+                );
+
+                match outcome {
+                    Ok(cancelled) => {
+                        cancelling.store(cancelled, Ordering::Release);
                         armed.store(true, Ordering::Release);
+                        state.store(EngineState::Listening as u8, Ordering::Release);
                     }
                     Err(e) => {
                         warn!("cannot open the microphone: {e}");
+                        cancelling.store(false, Ordering::Release);
                         chirps.play(Chirp::Fault);
                     }
                 }
             }
 
             Command::Transmit(on) => {
-                if on && microphone.is_none() {
-                    // Transmitting without an armed microphone is a programming
-                    // error, not a user error. Open it rather than go silent.
-                    warn!("transmit was requested before the microphone was armed");
-                    if let Ok((mic, _)) = open_microphone(&shared, tx.clone(), &preference) {
-                        microphone = Some(mic);
-                        armed.store(true, Ordering::Release);
-                    }
-                }
-
                 shared.transmitting.store(on, Ordering::Relaxed);
                 state.store(
                     if on {
                         EngineState::Live as u8
-                    } else if speaker.is_some() {
+                    } else if speaker.is_some() || voice.is_some() {
                         EngineState::Listening as u8
                     } else {
                         EngineState::Idle as u8
@@ -525,61 +616,89 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
                 );
             }
 
-            Command::Disarm => {
+            Command::Disarm { consumers } => {
                 shared.transmitting.store(false, Ordering::Relaxed);
+
+                drop(voice.take());
                 if let Some(mic) = microphone.take() {
                     mic.close();
                 }
-                armed.store(false, Ordering::Release);
-                state.store(
-                    if speaker.is_some() {
-                        EngineState::Listening as u8
-                    } else {
-                        EngineState::Idle as u8
-                    },
-                    Ordering::Release,
-                );
-            }
-
-            Command::Chirp(chirp) => chirps.play(chirp),
-
-            Command::Reopen => {
-                // The microphone picks up its preference the next time it
-                // opens, which is the next conversation. The speaker is open
-                // all the time, so it has to be rebuilt now.
-                //
-                // Rebuilding replaces the slot table, because the output
-                // callback owns the read side of every packet queue. Whoever
-                // is in the session must be activated again on the new table,
-                // which the application does when this returns.
                 drop(speaker.take());
 
-                let (table, fresh) = SlotTable::new();
-                slots.store(Arc::new(table));
+                cancelling.store(false, Ordering::Release);
+                armed.store(false, Ordering::Release);
 
+                // Back to listening. The speaker never stays shut, because a
+                // contact must be able to reach this machine at any moment.
                 open_speaker(
                     &slots,
-                    fresh,
+                    consumers,
                     &chirps,
                     &preference,
                     &state,
                     &mut speaker,
                     &mut output_report,
                 );
+            }
 
+            Command::Chirp(chirp) => chirps.play(chirp),
+
+            Command::Reopen { consumers } => {
+                let was_talking = voice.is_some() || microphone.is_some();
+
+                drop(voice.take());
                 if let Some(mic) = microphone.take() {
                     mic.close();
-                    armed.store(false, Ordering::Release);
                 }
+                drop(speaker.take());
+
+                if was_talking {
+                    let want = want_cancelling.load(Ordering::Acquire);
+                    match start_talking(
+                        want,
+                        consumers,
+                        &slots,
+                        &chirps,
+                        &shared,
+                        &preference,
+                        &tx,
+                        &mut voice,
+                        &mut microphone,
+                        &mut speaker,
+                        &mut output_report,
+                        &report,
+                        &state,
+                    ) {
+                        Ok(cancelled) => cancelling.store(cancelled, Ordering::Release),
+                        Err(e) => {
+                            warn!("cannot reopen the microphone: {e}");
+                            cancelling.store(false, Ordering::Release);
+                        }
+                    }
+                } else {
+                    cancelling.store(false, Ordering::Release);
+                    open_speaker(
+                        &slots,
+                        consumers,
+                        &chirps,
+                        &preference,
+                        &state,
+                        &mut speaker,
+                        &mut output_report,
+                    );
+                }
+
                 info!("reopened the audio devices");
             }
 
             Command::Shutdown => {
                 shared.transmitting.store(false, Ordering::Relaxed);
+                drop(voice.take());
                 if let Some(mic) = microphone.take() {
                     mic.close();
                 }
                 armed.store(false, Ordering::Release);
+                cancelling.store(false, Ordering::Release);
                 slots.load().clear();
                 drop(speaker);
                 state.store(EngineState::Idle as u8, Ordering::Release);
@@ -587,6 +706,127 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
             }
         }
     }
+}
+
+/// Opens both directions for a conversation.
+///
+/// Returns whether echo cancellation is running.
+///
+/// The voice unit is tried first, and the plain pair of streams is the fallback.
+/// A machine where the voice unit will not start still gets a working
+/// conversation; it just echoes on speakers. Refusing to talk at all would be
+/// a worse answer.
+#[allow(clippy::too_many_arguments)]
+fn start_talking(
+    want_cancelling: bool,
+    consumers: Vec<packet::PacketConsumer>,
+    slots: &Arc<arc_swap::ArcSwap<SlotTable>>,
+    chirps: &Arc<ChirpPlayer>,
+    shared: &Arc<capture::CaptureShared>,
+    preference: &Arc<std::sync::Mutex<DevicePreference>>,
+    tx: &Arc<dyn AudioTx>,
+    voice: &mut Option<vpio::VoiceUnit>,
+    microphone: &mut Option<OpenMicrophone>,
+    speaker: &mut Option<playback::Playback>,
+    output_report: &mut Option<(String, f32, bool, device::EchoRisk)>,
+    report: &Arc<std::sync::Mutex<Option<DeviceReport>>>,
+    state: &Arc<std::sync::atomic::AtomicU8>,
+) -> Result<bool> {
+    let wanted = preference.lock().map(|p| p.clone()).unwrap_or_default();
+
+    if want_cancelling {
+        let (frames_producer, frames) =
+            ringbuf::traits::Split::split(ringbuf::HeapRb::<capture::OutgoingFrame>::new(
+                crate::config::PEER_QUEUE_PACKETS,
+            ));
+
+        let mixer = playback::Mixer::new(slots.load_full(), consumers, chirps.clone());
+        let encoder = capture::Encoder::new(shared.clone(), frames_producer);
+
+        match (mixer, encoder) {
+            (Ok(mixer), Ok(encoder)) => {
+                match vpio::start(vpio::resolve(&wanted), mixer, encoder, shared.clone()) {
+                    Ok(unit) => {
+                        *voice = Some(unit);
+                        *microphone = Some(OpenMicrophone::sender_only(frames, tx.clone())?);
+
+                        let input_name = wanted
+                            .input
+                            .clone()
+                            .or_else(|| device::default_name(device::Direction::Input))
+                            .unwrap_or_else(|| "voice unit".into());
+                        let output_name = wanted
+                            .output
+                            .clone()
+                            .or_else(|| device::default_name(device::Direction::Output))
+                            .unwrap_or_else(|| "voice unit".into());
+
+                        *output_report =
+                            Some((output_name.clone(), 0.0, true, device::EchoRisk::Cancelled));
+
+                        if let Ok(mut guard) = report.lock() {
+                            *guard = Some(DeviceReport {
+                                input_name,
+                                output_name,
+                                // The voice unit does not expose its buffer
+                                // size. Reporting a guess would be worse than
+                                // reporting nothing.
+                                input_buffer_ms: f32::NAN,
+                                output_buffer_ms: f32::NAN,
+                                native_rate: unit_at_48k(voice.as_ref()),
+                                echo: device::EchoRisk::Cancelled,
+                            });
+                        }
+
+                        state.store(EngineState::Listening as u8, Ordering::Release);
+                        return Ok(true);
+                    }
+                    Err(e) => {
+                        warn!(
+                            "the voice unit would not start, so this conversation has no echo \
+                             cancellation: {e}"
+                        );
+                    }
+                }
+            }
+            (Err(e), _) | (_, Err(e)) => {
+                warn!("cannot build the voice path: {e}");
+            }
+        }
+
+        // The consumers were moved into the failed mixer, so the caller has to
+        // start again with a fresh table.
+        return Err(Error::Audio(
+            "the voice unit failed and its queues went with it".into(),
+        ));
+    }
+
+    // Plain pair of streams: speaker open, microphone open, no cancellation.
+    open_speaker(
+        slots,
+        consumers,
+        chirps,
+        preference,
+        state,
+        speaker,
+        output_report,
+    );
+    let (mic, input_summary) = open_microphone(shared, tx.clone(), preference)?;
+    *microphone = Some(mic);
+
+    if let Ok(mut guard) = report.lock() {
+        *guard = build_report(&input_summary, output_report.as_ref());
+    }
+
+    Ok(false)
+}
+
+/// True when the voice unit settled on 48 kHz on both sides.
+fn unit_at_48k(unit: Option<&vpio::VoiceUnit>) -> bool {
+    unit.map(|u| {
+        u.input_rate == crate::config::SAMPLE_RATE && u.output_rate == crate::config::SAMPLE_RATE
+    })
+    .unwrap_or(false)
 }
 
 /// What the audio thread needs to run. Bundled so the signature stays legible.
@@ -600,6 +840,8 @@ struct ThreadContext {
     state: Arc<std::sync::atomic::AtomicU8>,
     armed: Arc<AtomicBool>,
     preference: Arc<std::sync::Mutex<DevicePreference>>,
+    cancelling: Arc<AtomicBool>,
+    want_cancelling: Arc<AtomicBool>,
 }
 
 /// Opens the speaker and records what was chosen.
@@ -641,12 +883,37 @@ fn open_speaker(
 
 /// The microphone while it is open.
 struct OpenMicrophone {
-    _capture: capture::Capture,
+    /// `None` when the voice unit owns the microphone instead of `cpal`.
+    _capture: Option<capture::Capture>,
     sender: Option<std::thread::JoinHandle<()>>,
     sender_running: Arc<AtomicBool>,
 }
 
 impl OpenMicrophone {
+    /// Builds the sender thread only, for the voice unit path.
+    ///
+    /// The voice unit owns the microphone itself, so there is no `cpal` stream
+    /// here. What is still needed is the thread that carries encoded frames to
+    /// the network.
+    fn sender_only(
+        frames: ringbuf::HeapCons<capture::OutgoingFrame>,
+        tx: Arc<dyn AudioTx>,
+    ) -> Result<Self> {
+        let sender_running = Arc::new(AtomicBool::new(true));
+        let running = sender_running.clone();
+
+        let sender = std::thread::Builder::new()
+            .name("swivel-audio-tx".into())
+            .spawn(move || capture::sender_loop(frames, tx, running))
+            .map_err(|e| Error::Audio(format!("cannot start the sender thread: {e}")))?;
+
+        Ok(OpenMicrophone {
+            _capture: None,
+            sender: Some(sender),
+            sender_running,
+        })
+    }
+
     fn close(mut self) {
         self.sender_running.store(false, Ordering::Relaxed);
         if let Some(handle) = self.sender.take() {
@@ -681,7 +948,7 @@ fn open_microphone(
 
     Ok((
         OpenMicrophone {
-            _capture: capture,
+            _capture: Some(capture),
             sender: Some(sender),
             sender_running,
         },

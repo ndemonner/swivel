@@ -11,8 +11,8 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Sel};
 use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSEventMask, NSEventType, NSMenu, NSMenuItem, NSStatusBar, NSStatusItem,
-    NSVariableStatusItemLength,
+    NSControlStateValueOff, NSControlStateValueOn, NSEventMask, NSEventType, NSMenu, NSMenuItem,
+    NSStatusBar, NSStatusItem, NSVariableStatusItemLength,
 };
 use objc2_foundation::{MainThreadMarker, NSObject, NSObjectProtocol, NSPoint, NSString};
 
@@ -40,6 +40,8 @@ pub enum MenuAction {
     ChooseOutput(usize),
     /// Follow the system defaults again.
     ResetDevices,
+    /// Turn echo cancellation on or off.
+    ToggleEchoCancellation,
 }
 
 pub struct TargetIvars {
@@ -139,6 +141,11 @@ define_class!(
         fn reset_devices(&self, _sender: Option<&AnyObject>) {
             (self.ivars().actions)(MenuAction::ResetDevices);
         }
+
+        #[unsafe(method(toggleEcho:))]
+        fn toggle_echo(&self, _sender: Option<&AnyObject>) {
+            (self.ivars().actions)(MenuAction::ToggleEchoCancellation);
+        }
     }
 );
 
@@ -187,7 +194,7 @@ impl StatusItem {
         // changes when headphones are plugged in. It is attached only for the
         // instant it is shown: attaching it permanently would make a left click
         // open the menu instead of the roster.
-        let menu = Self::build_menu(mtm, &target);
+        let menu = Self::build_menu(mtm, &target, true);
 
         StatusItem {
             item,
@@ -198,7 +205,7 @@ impl StatusItem {
         }
     }
 
-    fn build_menu(mtm: MainThreadMarker, target: &MenuTarget) -> Retained<NSMenu> {
+    fn build_menu(mtm: MainThreadMarker, target: &MenuTarget, echo_on: bool) -> Retained<NSMenu> {
         let menu = NSMenu::new(mtm);
 
         // `None` marks a separator.
@@ -240,7 +247,10 @@ impl StatusItem {
                 &NSString::from_str(""),
             )
         };
-        menu.setSubmenu_forItem(Some(&Self::build_devices_menu(mtm, target)), &devices);
+        menu.setSubmenu_forItem(
+            Some(&Self::build_devices_menu(mtm, target, echo_on)),
+            &devices,
+        );
         menu.insertItem_atIndex(&devices, (menu.numberOfItems() - 2).max(0));
 
         menu
@@ -251,9 +261,9 @@ impl StatusItem {
     /// The menu is attached, clicked, and detached again. `NSStatusItem` has no
     /// other way to show a menu on demand, and leaving it attached would make
     /// every left click open the menu instead of the roster.
-    pub fn show_menu(&self) {
+    pub fn show_menu(&self, echo_on: bool) {
         // Rebuild first. A device list from a minute ago is often wrong.
-        let fresh = Self::build_menu(self.mtm, &self.target);
+        let fresh = Self::build_menu(self.mtm, &self.target, echo_on);
         self.item.setMenu(Some(&fresh));
         if let Some(button) = self.item.button(self.mtm) {
             unsafe { button.performClick(None) };
@@ -265,10 +275,33 @@ impl StatusItem {
     ///
     /// The system default is offered first, so a user who changed a device by
     /// accident has an obvious way back.
-    fn build_devices_menu(mtm: MainThreadMarker, target: &MenuTarget) -> Retained<NSMenu> {
+    fn build_devices_menu(
+        mtm: MainThreadMarker,
+        target: &MenuTarget,
+        echo_on: bool,
+    ) -> Retained<NSMenu> {
         use crate::audio::device::{self, Direction};
 
         let menu = NSMenu::new(mtm);
+
+        let echo = unsafe {
+            NSMenuItem::initWithTitle_action_keyEquivalent(
+                NSMenuItem::alloc(mtm),
+                &NSString::from_str("Cancel echo"),
+                Some(sel!(toggleEcho:)),
+                &NSString::from_str(""),
+            )
+        };
+        unsafe { echo.setTarget(Some(target)) };
+        // A tick means it is on. Without cancellation, using a loudspeaker
+        // makes the far end hear themselves.
+        echo.setState(if echo_on {
+            NSControlStateValueOn
+        } else {
+            NSControlStateValueOff
+        });
+        menu.addItem(&echo);
+        menu.addItem(&NSMenuItem::separatorItem(mtm));
 
         let reset = unsafe {
             NSMenuItem::initWithTitle_action_keyEquivalent(

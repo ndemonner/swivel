@@ -40,6 +40,72 @@ struct PlaybackSlot {
     pcm: Vec<f32>,
 }
 
+/// Decodes every peer and sums them into one mono stream at 48 kHz.
+///
+/// This is the whole real-time receive path, and it is deliberately separate
+/// from the device that plays it. Two devices drive it: the plain CoreAudio
+/// output stream, and the Voice Processing unit that also cancels echo. Both
+/// need identical mixing, and having one copy of it means they cannot drift.
+pub struct Mixer {
+    slots: Vec<PlaybackSlot>,
+    table: Arc<SlotTable>,
+    chirps: Arc<ChirpPlayer>,
+    mix: Vec<f32>,
+    /// How much of `mix` has been handed out. A device buffer is rarely a whole
+    /// number of 10 ms frames, so a frame carries across callbacks.
+    position: usize,
+}
+
+impl Mixer {
+    /// Builds every slot up front. This is the allocation the callback then
+    /// never has to make.
+    pub fn new(
+        table: Arc<SlotTable>,
+        consumers: Vec<PacketConsumer>,
+        chirps: Arc<ChirpPlayer>,
+    ) -> Result<Self> {
+        if consumers.len() != MAX_PEERS {
+            return Err(Error::Audio(format!(
+                "expected {MAX_PEERS} peer queues and got {}",
+                consumers.len()
+            )));
+        }
+
+        let mut slots = Vec::with_capacity(MAX_PEERS);
+        for consumer in consumers {
+            slots.push(PlaybackSlot {
+                decoder: opus::Decoder::new(SAMPLE_RATE, opus::Channels::Mono)
+                    .map_err(Error::audio)?,
+                consumer,
+                buffer: Buffer::new(),
+                generation: 0,
+                pcm: vec![0f32; FRAME_SAMPLES],
+            });
+        }
+
+        Ok(Mixer {
+            slots,
+            table,
+            chirps,
+            mix: vec![0f32; FRAME_SAMPLES],
+            // Start exhausted, so the first call mixes a frame.
+            position: FRAME_SAMPLES,
+        })
+    }
+
+    /// The next mono sample at 48 kHz. Mixes a new frame when one runs out.
+    #[inline]
+    pub fn next_sample(&mut self) -> f32 {
+        if self.position >= FRAME_SAMPLES {
+            mix_frame(&mut self.slots, &self.table, &self.chirps, &mut self.mix);
+            self.position = 0;
+        }
+        let sample = self.mix[self.position];
+        self.position += 1;
+        sample
+    }
+}
+
 /// The running output stream. Dropping it stops playback.
 pub struct Playback {
     /// `cpal::Stream` is not `Send` on macOS. It stays on its own thread.
@@ -65,30 +131,7 @@ pub fn open(
     let channels = config.channels.max(1) as usize;
     let level = Arc::new(AtomicU32::new(0));
 
-    if consumers.len() != MAX_PEERS {
-        return Err(Error::Audio(format!(
-            "expected {MAX_PEERS} peer queues and got {}",
-            consumers.len()
-        )));
-    }
-
-    // Build every slot before the stream starts. This is the allocation that
-    // the callback then never has to make.
-    let mut playback_slots = Vec::with_capacity(MAX_PEERS);
-    for consumer in consumers {
-        playback_slots.push(PlaybackSlot {
-            decoder: opus::Decoder::new(SAMPLE_RATE, opus::Channels::Mono).map_err(Error::audio)?,
-            consumer,
-            buffer: Buffer::new(),
-            generation: 0,
-            pcm: vec![0f32; FRAME_SAMPLES],
-        });
-    }
-
-    let mut mix = vec![0f32; FRAME_SAMPLES];
-    // How much of `mix` has already been consumed. A device buffer is rarely a
-    // whole number of 10 ms frames, so a frame is carried across callbacks.
-    let mut mix_position = FRAME_SAMPLES;
+    let mut mixer = Mixer::new(slots, consumers, chirps)?;
 
     // The mix is always 48 kHz. The device may not be. A Bluetooth headset
     // usually runs at 44.1 kHz, and sending it 48 kHz audio plays everything
@@ -111,20 +154,8 @@ pub fn open(
                 let mut peak = 0f32;
 
                 for out_frame in output.chunks_mut(channels) {
-                    // Pull one sample at the device's rate. The converter asks
-                    // for 48 kHz samples as it needs them, and a new frame is
-                    // mixed only when the previous one runs out.
-                    let mut next_mix_sample = || {
-                        if mix_position >= FRAME_SAMPLES {
-                            mix_frame(&mut playback_slots, &slots, &chirps, &mut mix);
-                            mix_position = 0;
-                        }
-                        let sample = mix[mix_position];
-                        mix_position += 1;
-                        Some(sample)
-                    };
-
-                    let sample = resampler.next(&mut next_mix_sample).unwrap_or(0.0);
+                    let mut source = || Some(mixer.next_sample());
+                    let sample = resampler.next(&mut source).unwrap_or(0.0);
 
                     let magnitude = sample.abs();
                     if magnitude > peak {

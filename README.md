@@ -28,8 +28,9 @@ network round trip. On a LAN that is about 42 ms, mouth to ear.
 
 Your friend runs `swivel approve <key>` once, and the link goes live.
 
-**Wear headphones.** Version 1 has no echo canceller, so on speakers the other
-person hears themselves.
+Speakers are fine. Echo cancellation is on by default, using the same Apple
+voice processing unit FaceTime uses. The menu has a toggle if you wear
+headphones and want the audio untouched.
 
 ## Talking
 

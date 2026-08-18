@@ -64,7 +64,7 @@ pub struct CaptureShared {
     pub transmitting: AtomicBool,
 
     /// The peak level of the last frame, as `f32` bits. Drives the meter.
-    peak_bits: AtomicU32,
+    pub peak_bits: AtomicU32,
 
     /// True while the local level is above the speaking threshold.
     pub speaking: AtomicBool,
@@ -101,6 +101,133 @@ impl CaptureShared {
     }
 }
 
+/// Encodes mono 48 kHz samples into packets for the network.
+///
+/// This is separate from the device that captures them, because two devices
+/// drive it: the plain CoreAudio input stream, and the Voice Processing unit
+/// that hands over echo-cancelled audio. Both need identical encoding.
+pub struct Encoder {
+    encoder: opus::Encoder,
+    accumulator: Vec<f32>,
+    filled: usize,
+    payload: Vec<u8>,
+    frame: OutgoingFrame,
+    seq: u16,
+    timestamp: u32,
+    /// False until the first frame of a talkspurt has been sent.
+    started: bool,
+    producer: HeapProd<OutgoingFrame>,
+    shared: Arc<CaptureShared>,
+}
+
+impl Encoder {
+    /// Builds the encoder and every buffer it will ever use.
+    pub fn new(shared: Arc<CaptureShared>, producer: HeapProd<OutgoingFrame>) -> Result<Self> {
+        let mut encoder = opus::Encoder::new(
+            SAMPLE_RATE,
+            opus::Channels::Mono,
+            // `Audio` rather than `Voip`. The goal is presence, not
+            // intelligibility at a low bitrate. `Voip` applies speech shaping
+            // that makes a voice sound processed.
+            opus::Application::Audio,
+        )
+        .map_err(Error::audio)?;
+
+        encoder
+            .set_bitrate(opus::Bitrate::Bits(OPUS_BITRATE))
+            .map_err(Error::audio)?;
+        encoder
+            .set_complexity(OPUS_COMPLEXITY)
+            .map_err(Error::audio)?;
+        // In-band forward error correction. A lost frame is rebuilt from the
+        // next packet, and a real-time link has no time to ask for a
+        // retransmission.
+        encoder.set_inband_fec(true).map_err(Error::audio)?;
+        encoder
+            .set_packet_loss_perc(OPUS_EXPECTED_LOSS)
+            .map_err(Error::audio)?;
+
+        Ok(Encoder {
+            encoder,
+            accumulator: vec![0f32; FRAME_SAMPLES],
+            filled: 0,
+            payload: vec![0u8; MAX_PACKET_BYTES],
+            frame: OutgoingFrame::empty(),
+            seq: 0,
+            timestamp: 0,
+            started: false,
+            producer,
+            shared,
+        })
+    }
+
+    /// Forgets a partial frame. Use it when the microphone closes, so the next
+    /// talkspurt does not begin with samples from before the pause.
+    pub fn reset(&mut self) {
+        self.filled = 0;
+        self.started = false;
+    }
+
+    /// Accepts one mono sample at 48 kHz, and emits a packet every 10 ms.
+    ///
+    /// Nothing here allocates. It is called from a real-time callback.
+    #[inline]
+    pub fn push(&mut self, sample: f32) {
+        self.accumulator[self.filled] = sample;
+        self.filled += 1;
+
+        if self.filled < FRAME_SAMPLES {
+            return;
+        }
+        self.filled = 0;
+
+        let encoded = match self
+            .encoder
+            .encode_float(&self.accumulator, &mut self.payload)
+        {
+            Ok(n) => n,
+            Err(_) => {
+                self.shared.encode_errors.fetch_add(1, Ordering::Relaxed);
+                return;
+            }
+        };
+
+        let flags = if self.started {
+            0
+        } else {
+            // The first frame after silence. The receiver uses this to restart
+            // its jitter buffer instead of concealing the pause.
+            FLAG_TALKSPURT_START
+        };
+        self.started = true;
+
+        match AudioPacket::encode_into(
+            self.seq,
+            self.timestamp,
+            flags,
+            &self.payload[..encoded],
+            &mut self.frame.bytes,
+        ) {
+            Ok(total) => self.frame.len = total as u16,
+            Err(_) => {
+                self.shared.encode_errors.fetch_add(1, Ordering::Relaxed);
+                return;
+            }
+        }
+
+        self.seq = self.seq.wrapping_add(1);
+        self.timestamp = self.timestamp.wrapping_add(FRAME_SAMPLES as u32);
+
+        if self.producer.try_push(self.frame).is_err() {
+            // The sender thread is behind. Dropping the frame is correct:
+            // holding it would only make the audio later.
+            self.shared.dropped.fetch_add(1, Ordering::Relaxed);
+        }
+
+        self.shared.encoded.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
 /// The running capture stream. Dropping it stops the microphone.
 pub struct Capture {
     /// `cpal::Stream` is not `Send` on macOS, so it stays on the thread that
@@ -133,33 +260,12 @@ pub fn open(
 fn build_stream(
     chosen: &Chosen,
     shared: Arc<CaptureShared>,
-    mut producer: HeapProd<OutgoingFrame>,
+    producer: HeapProd<OutgoingFrame>,
 ) -> Result<Stream> {
     let config: StreamConfig = chosen.config;
     let channels = config.channels.max(1) as usize;
 
-    let mut encoder = opus::Encoder::new(
-        SAMPLE_RATE,
-        opus::Channels::Mono,
-        // `Audio` rather than `Voip`. The goal is presence, not intelligibility
-        // at a low bitrate. `Voip` applies speech shaping that makes a voice
-        // sound processed.
-        opus::Application::Audio,
-    )
-    .map_err(Error::audio)?;
-
-    encoder
-        .set_bitrate(opus::Bitrate::Bits(OPUS_BITRATE))
-        .map_err(Error::audio)?;
-    encoder
-        .set_complexity(OPUS_COMPLEXITY)
-        .map_err(Error::audio)?;
-    // In-band forward error correction. A lost frame is rebuilt from the next
-    // packet. A real-time link has no time to ask for a retransmission.
-    encoder.set_inband_fec(true).map_err(Error::audio)?;
-    encoder
-        .set_packet_loss_perc(OPUS_EXPECTED_LOSS)
-        .map_err(Error::audio)?;
+    let mut encoder = Encoder::new(shared.clone(), producer)?;
 
     // The codec is always fed 48 kHz. A microphone that runs at another rate,
     // which most Bluetooth headsets do, is converted first. Without this the
@@ -173,16 +279,6 @@ fn build_stream(
         );
     }
 
-    // Everything the callback touches is allocated here, before the stream
-    // starts. Nothing below this line allocates.
-    let mut accumulator = vec![0f32; FRAME_SAMPLES];
-    let mut filled = 0usize;
-    let mut payload = vec![0u8; MAX_PACKET_BYTES];
-    let mut frame = OutgoingFrame::empty();
-    let mut seq: u16 = 0;
-    let mut timestamp: u32 = 0;
-    let mut was_transmitting = false;
-
     let callback_shared = shared.clone();
 
     let stream = chosen
@@ -190,21 +286,15 @@ fn build_stream(
         .build_input_stream::<f32, _, _>(
             config,
             move |input: &[f32], _info| {
-                let transmitting = callback_shared.transmitting.load(Ordering::Relaxed);
-
-                if !transmitting {
+                if !callback_shared.transmitting.load(Ordering::Relaxed) {
                     // Closed microphone. Forget any partial frame and the
-                    // converter's history, so the next talkspurt starts clean
-                    // rather than with samples from before the pause.
-                    filled = 0;
+                    // converter's history, then do no other work.
+                    encoder.reset();
                     resampler.reset();
-                    was_transmitting = false;
                     callback_shared.peak_bits.store(0, Ordering::Relaxed);
                     callback_shared.speaking.store(false, Ordering::Relaxed);
                     return;
                 }
-
-                let mut peak = 0f32;
 
                 // Downmix to mono as the samples are pulled. The wire format is
                 // mono, and a stereo microphone carries nothing a conversation
@@ -216,66 +306,13 @@ fn build_stream(
                     Some(sum / chunk.len() as f32)
                 };
 
+                let mut peak = 0f32;
                 while let Some(mono) = resampler.next(&mut next_mono) {
                     let magnitude = mono.abs();
                     if magnitude > peak {
                         peak = magnitude;
                     }
-
-                    accumulator[filled] = mono;
-                    filled += 1;
-
-                    if filled < FRAME_SAMPLES {
-                        continue;
-                    }
-                    filled = 0;
-
-                    let encoded = match encoder.encode_float(&accumulator, &mut payload) {
-                        Ok(n) => n,
-                        Err(_) => {
-                            callback_shared
-                                .encode_errors
-                                .fetch_add(1, Ordering::Relaxed);
-                            continue;
-                        }
-                    };
-
-                    let flags = if was_transmitting {
-                        0
-                    } else {
-                        // The first frame after silence. The receiver uses this
-                        // to restart its jitter buffer instead of concealing
-                        // the pause.
-                        FLAG_TALKSPURT_START
-                    };
-                    was_transmitting = true;
-
-                    match AudioPacket::encode_into(
-                        seq,
-                        timestamp,
-                        flags,
-                        &payload[..encoded],
-                        &mut frame.bytes,
-                    ) {
-                        Ok(total) => frame.len = total as u16,
-                        Err(_) => {
-                            callback_shared
-                                .encode_errors
-                                .fetch_add(1, Ordering::Relaxed);
-                            continue;
-                        }
-                    }
-
-                    seq = seq.wrapping_add(1);
-                    timestamp = timestamp.wrapping_add(FRAME_SAMPLES as u32);
-
-                    if producer.try_push(frame).is_err() {
-                        // The sender thread is behind. Dropping the frame is
-                        // correct: holding it would only make the audio later.
-                        callback_shared.dropped.fetch_add(1, Ordering::Relaxed);
-                    }
-
-                    callback_shared.encoded.fetch_add(1, Ordering::Relaxed);
+                    encoder.push(mono);
                 }
 
                 callback_shared

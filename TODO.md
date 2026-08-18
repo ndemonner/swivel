@@ -76,6 +76,12 @@ before you touch it.
 ## M3 — Audio
 
 - [x] **T-052** Sample rate conversion for devices that are not 48 kHz
+- [x] **T-134** Echo cancellation with Apple's Voice Processing unit
+  - Accept: a conversation on a loudspeaker does not send the far end their own
+    voice back.
+  - Accept: the unit is built when a conversation starts and destroyed when one
+    ends, so the microphone is never held open.
+  - Accept: a machine where the unit will not start still gets a conversation.
   - Found by measurement, not by design review. See JOURNAL.md.
 
 - [x] **T-040** Device enumeration, selection, and 48 kHz preference
@@ -182,7 +188,6 @@ before you touch it.
 
 ## Backlog — not scheduled
 
-- [ ] **B-001** Acoustic echo cancellation with `webrtc-audio-processing`
 - [ ] **B-002** A stable self-signed certificate to stop repeat TCC prompts
 - [ ] **B-003** More than nine slots with a two-digit entry mode
 - [ ] **B-004** Opus stereo or a raw PCM mode for a LAN

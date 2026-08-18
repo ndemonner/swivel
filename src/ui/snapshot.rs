@@ -145,6 +145,7 @@ fn demo_state(live: bool) -> UiState {
         my_id: Some(id(9)),
         my_key: crate::store::ticket::Ticket::new(id(9), "nick").encode(),
         key_copied: false,
+        echo_cancelling: true,
         online: true,
         peers,
         knocks: vec![KnockView {
