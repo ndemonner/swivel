@@ -216,14 +216,16 @@ before you touch it.
     self-signed certificate on the release machine keeps the identity stable.
   - Accept: `scripts/build-release.sh` signs with the certificate when it is
     present and falls back to ad-hoc with a warning when it is not.
-- [~] **T-139** Team releases through CI — branch task/139b-admin-keys
-  - Taken over by ndemonner from wtachau. The implementation is merged. The
-    three repository secrets need a repository admin, which wtachau is not on
-    ndemonner/swivel.
-  - The rest of the work runs on the admin's machine: create the release
-    signing key and the code signing certificate here, rotate
-    `RELEASE_PUBKEY_HEX` to the new key, upload the three secrets, then cut a
-    release through CI to prove the path.
+- [x] **T-139** Team releases through CI
+  - Finished by ndemonner on the admin's machine, after wtachau handed it
+    over. The three secrets are set, and v0.2.2 published through CI.
+  - The release key was rotated. The old key was created on wtachau's
+    machine, and a private key must not move between laptops, so this
+    created a new key on the admin's machine. A v0.2.0 binary embeds the old
+    public key and refuses every later release. Anyone on v0.2.0 installs
+    once more with curl.
+  - The first attempt, v0.2.1, failed on CMake 4 on the runner. See
+    `.cargo/config.toml` and JOURNAL.md. The tag is deleted.
   - Four people must be able to release. Copying the signing key and the
     certificate to four laptops means four theft targets and no revocation,
     so the build moves to GitHub Actions instead. The two secrets live once,
@@ -268,3 +270,13 @@ before you touch it.
 - [ ] **B-006** A per-contact volume trim
 - [ ] **B-007** Two independent simultaneous sessions
 - [ ] **B-008** A push-to-talk key for people who want the microphone closed
+- [ ] **B-009** A release key rollover path, so a rotation stops breaking clients
+  - `RELEASE_PUBKEY_HEX` is one trust anchor with no way to move. Every
+    rotation makes each installed binary refuse all later releases, which is
+    what the T-139 rotation did to v0.2.0. Key loss has the same effect and
+    no recovery.
+  - Two options. Compile a short list of trusted keys and accept a signature
+    from any of them. Or publish the new public key signed by the old key, so
+    a client that trusts the old one can adopt the new one.
+  - Accept: a rotation ships a release that binaries on the previous version
+    still install.

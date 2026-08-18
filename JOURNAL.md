@@ -269,3 +269,48 @@ Newest entries at the bottom. Keep entries short. Record surprises.
   workflow fails with a clear message at the secret check.
 - Next: once the secrets exist, cut v0.2.1 through CI to verify the whole
   path, then mark T-139 done.
+
+## 2026-08-18 — T-139 the release secrets, and a key rotation
+
+- Did: finished T-139 on the admin's machine. Created a release signing key
+  and a code signing certificate here, rotated `RELEASE_PUBKEY_HEX` to the
+  new key, uploaded the three repository secrets, and published v0.2.2
+  through CI. The whole path now works for anyone with push access.
+- The rotation and why: the old release key was created on wtachau's machine
+  and only an admin can set a repository secret. Rather than move a private
+  key between laptops, this session created a new key here. The cost is
+  real. A v0.2.0 binary embeds the old public key, so it refuses v0.2.2 and
+  every later release. Anyone on v0.2.0 installs once more with curl.
+- Where the keys live, all mode 0600 in
+  `~/Library/Application Support/dev.motor.swivel/`: `release-signing.key`,
+  `release-cert.p12`, and `release-cert.p12.pass`. They exist on this one
+  machine and in the repository secret store. They are not backed up yet.
+  Losing them means shipped binaries refuse every future release.
+- Surprise, and the useful one: the first CI release failed and the cause
+  had nothing to do with the secrets. `audiopus_sys` builds the vendored
+  Opus source with CMake, and that source declares
+  `cmake_minimum_required(VERSION 3.1)`. CMake 4 removed compatibility below
+  3.5. The `macos-15` runner ships CMake 4. This machine has CMake 3.22, so
+  the identical build passed here and hid it completely.
+- Lesson: a green local build says nothing about the runner when a
+  dependency compiles C. The toolchain versions differ, and the failure
+  appears only at the moment of a release.
+- Fix: `.cargo/config.toml` sets `CMAKE_POLICY_VERSION_MINIMUM=3.5` for every
+  cargo command. CMake reads that environment variable from version 4.0, on
+  the first run that creates a build tree, which is every CI run. An older
+  CMake ignores it. It sits in the cargo config rather than the workflow
+  because a contributor with CMake 4 hits the same failure on a plain
+  `cargo build`.
+- v0.2.1 was tagged before the fix and never published. The tag is deleted.
+  The `release: v0.2.1` commit stays in main's history, and nothing was
+  force pushed. The failed run stays in the Actions history as the record.
+- Learned a cheap way to check a published artifact. ed25519 is
+  deterministic, so signing the downloaded binary again with the release key
+  reproduces the published `.sig` byte for byte. That proves the artifact,
+  the secret, and the embedded public key all agree, without a verify
+  command. `Authority=swivel release` from `codesign -dvvv` proves the build
+  used the certificate rather than the ad-hoc fallback.
+- Next: back the three key files up, and add the other two teammates as
+  collaborators with push access. Push access is the whole release ACL now.
+  B-009 covers the deeper problem: one embedded key with no rollover means
+  every future rotation breaks every installed binary the same way.
