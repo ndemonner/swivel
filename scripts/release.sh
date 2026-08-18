@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 #
-# Cuts a release: bumps the version, tags it, builds the signed universal
-# binary, signs the artifact with the project release key, and publishes a
-# GitHub release. `swivel update` installs from what this publishes.
+# Cuts a release. Any collaborator with push access can run it; no keys are
+# needed on this machine. It bumps the version, commits, tags, and pushes.
+# The release workflow (.github/workflows/release.yml) then builds, signs,
+# and publishes. `swivel update` installs from what it publishes.
 #
-#   ./scripts/release.sh 0.2.0
+#   ./scripts/release.sh 0.3.0
+#   ./scripts/release.sh 0.3.0 --local    build and publish here instead,
+#                                         using this machine's keys. The
+#                                         fallback for when CI is down.
 #
 # Run it on main with a clean tree. It refuses anything else.
 
@@ -12,8 +16,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="${1:-}"
+LOCAL="${2:-}"
 if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "usage: ./scripts/release.sh <major.minor.patch>" >&2
+  echo "usage: ./scripts/release.sh <major.minor.patch> [--local]" >&2
   exit 1
 fi
 TAG="v$VERSION"
@@ -26,6 +31,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
   echo "the tree is not clean. Commit or stash first." >&2
   exit 1
 fi
+git pull --ff-only
 if git rev-parse "$TAG" >/dev/null 2>&1; then
   echo "$TAG already exists." >&2
   exit 1
@@ -42,7 +48,17 @@ git add Cargo.toml Cargo.lock
 git commit -m "release: $TAG"
 git tag "$TAG"
 
-echo "==> building the universal binary"
+if [[ "$LOCAL" != "--local" ]]; then
+  echo "==> handing over to CI"
+  git push
+  git push origin "$TAG"
+  echo
+  echo "==> $TAG is tagged. The release workflow builds and publishes it."
+  echo "    Watch it: gh run watch --repo \$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+  exit 0
+fi
+
+echo "==> building the universal binary locally"
 ./scripts/build-release.sh
 
 echo "==> signing the artifact with the release key"

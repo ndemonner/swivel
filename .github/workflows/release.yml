@@ -1,0 +1,102 @@
+# Builds and publishes a release when a version tag is pushed.
+#
+# Anyone with push access releases by running `./scripts/release.sh <version>`,
+# which bumps, commits, tags, and pushes. This workflow does the rest: the
+# universal build, the codesign, the release-key signature, and the GitHub
+# release. No contributor needs the keys on their machine.
+#
+# Secrets, set once by a repository admin (see ARCHITECTURE.md §9.5):
+#   RELEASE_SIGNING_KEY     hex ed25519 key, the contents of release-signing.key
+#   CODESIGN_P12            base64 of release-cert.p12 from make-signing-cert.sh
+#   CODESIGN_P12_PASSWORD   contents of release-cert.p12.pass
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refuse a tag that does not match Cargo.toml
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          CARGO_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [[ "$TAG_VERSION" != "$CARGO_VERSION" ]]; then
+            echo "tag is $TAG_VERSION but Cargo.toml says $CARGO_VERSION." >&2
+            echo "Cut releases with scripts/release.sh, which keeps them equal." >&2
+            exit 1
+          fi
+
+      - name: Install the certificate into a build keychain
+        env:
+          CODESIGN_P12: ${{ secrets.CODESIGN_P12 }}
+          CODESIGN_P12_PASSWORD: ${{ secrets.CODESIGN_P12_PASSWORD }}
+        run: |
+          if [[ -z "$CODESIGN_P12" ]]; then
+            echo "the CODESIGN_P12 secret is not set. An admin must upload it." >&2
+            exit 1
+          fi
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASS=$(openssl rand -hex 16)
+
+          security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain
+
+          echo "$CODESIGN_P12" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$CODESIGN_P12_PASSWORD" -T /usr/bin/codesign
+
+          # Let codesign use the key without a UI prompt, which CI cannot answer.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASS" "$KEYCHAIN" >/dev/null
+
+          # A self-signed certificate must be trusted or codesign refuses it.
+          openssl pkcs12 -in "$RUNNER_TEMP/cert.p12" -clcerts -nokeys \
+            -passin "pass:$CODESIGN_P12_PASSWORD" -legacy -out "$RUNNER_TEMP/cert.pem" \
+            || openssl pkcs12 -in "$RUNNER_TEMP/cert.p12" -clcerts -nokeys \
+                 -passin "pass:$CODESIGN_P12_PASSWORD" -out "$RUNNER_TEMP/cert.pem"
+          sudo security add-trusted-cert -d -r trustRoot \
+            -k /Library/Keychains/System.keychain "$RUNNER_TEMP/cert.pem"
+          rm "$RUNNER_TEMP/cert.p12"
+
+      - name: Build the signed universal binary
+        run: ./scripts/build-release.sh
+
+      - name: Check and test
+        run: |
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+
+      - name: Sign the artifact with the release key
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          if [[ -z "$RELEASE_SIGNING_KEY" ]]; then
+            echo "the RELEASE_SIGNING_KEY secret is not set. An admin must upload it." >&2
+            exit 1
+          fi
+          KEY_FILE="$RUNNER_TEMP/release-signing.key"
+          printf '%s' "$RELEASE_SIGNING_KEY" > "$KEY_FILE"
+          # The binary itself signs and refuses a key that does not match the
+          # public key compiled into it, so a bad secret fails here, not in
+          # every user's update.
+          SWIVEL_RELEASE_KEY="$KEY_FILE" ./swivel release-sign ./swivel
+          rm "$KEY_FILE"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" ./swivel ./swivel.sig \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

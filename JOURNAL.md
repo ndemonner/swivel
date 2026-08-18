@@ -245,3 +245,27 @@ Newest entries at the bottom. Keep entries short. Record surprises.
   flips. wtachau has push, which is enough to publish the release itself.
 - Next: T-103/T-104 doctor extensions, or T-120 to turn this session's local
   release-server test into a script.
+
+## 2026-08-18 — T-139 team releases through CI
+
+- Did: moved the release build into a GitHub Actions workflow so all four
+  team members can release with `./scripts/release.sh <version>` and no keys
+  on their machines. The script now only bumps, tags, and pushes; CI builds,
+  codesigns, signs with the release key, and publishes. `--local` keeps the
+  old path as a fallback.
+- Rotated the signing certificate so the .p12 could be captured for the CI
+  secret store; the original's private key was not exportable from the
+  keychain without the GUI. make-signing-cert.sh now always saves the .p12
+  and its password next to the database. The one release signed with the old
+  certificate, v0.2.0, will re-ask for the microphone once on the next
+  update, which today affects nobody.
+- Learned: the trust boundary moves. With secrets in the repository, anyone
+  who can edit the workflow or the secrets can ship a signed release.
+  Repository admin is now the thing to guard, and the ARCHITECTURE note says
+  so.
+- Blocked: setting repository secrets needs admin, which wtachau does not
+  have on ndemonner/swivel. The exact `gh secret set` commands are in the
+  session notes and in make-signing-cert.sh's output. Until they run, the
+  workflow fails with a clear message at the secret check.
+- Next: once the secrets exist, cut v0.2.1 through CI to verify the whole
+  path, then mark T-139 done.

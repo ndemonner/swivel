@@ -4,5 +4,8 @@
 *.db-journal
 .DS_Store
 
-# The distributable binary, produced by scripts/build-release.sh
+# The distributable binary and its release artifacts, produced by
+# scripts/build-release.sh and scripts/release.sh
 /swivel
+/swivel.sig
+/_CodeSignature
