@@ -184,3 +184,40 @@ Newest entries at the bottom. Keep entries short. Record surprises.
   would have been "it sounds a bit off" from someone on AirPods.
 - Lesson two: a Bluetooth headset at 44.1 kHz is the common case, not an edge
   case. Test on the hardware people actually own.
+
+## 2026-08-18 — T-135 engine-owned session membership
+
+- Bug reported by the user: in a three-person session the hub heard only the
+  member added last. It looked like a net split. It was not: every connection
+  was healthy, and the hub itself was heard by everyone.
+- Root cause: slot ownership is derived state, and re-deriving it after a
+  path rebuild was a convention spread across the `arm`/`disarm`/`set_devices`
+  call sites. `add_member` arms on every digit press, `arm` installs a fresh
+  empty `SlotTable`, and `add_member` re-activated only the new member. The
+  older members' datagrams were then dropped at `deliver`, which is silent by
+  design. `on_session_open` re-activated the full list, which is why only the
+  hub was deaf.
+- Fix: the engine now stores the declared member set and `swap_slots`
+  populates every fresh table from it before publishing. The session declares
+  membership through `AudioSink::set_members` from one place,
+  `publish_session`. The re-activation loops in `set_device` and
+  `on_session_open` are deleted, and `Engine::slots` is private so nothing can
+  bypass the set.
+- Verified: three tui instances in a full mesh. On this branch every instance
+  settles at played/encoded = 2.0 exactly, so everyone hears both peers. The
+  same script on unfixed `main` shows the hub at 1.0 and the other two at 2.0.
+  The script drives the hub with digit presses over a fifo and reads the
+  counter line from the tui output. Worth turning into T-120.
+- Learned: the counters prove membership without listening. played/encoded is
+  frames heard per frame spoken, and in a full mesh of three it must be 2.0.
+  A ratio, not a rate: the wall clock drops out, so two samples of the log
+  line are enough.
+- Surprise: the fixed hub shows a one-time `overrun` burst of ~51 packets at
+  the second digit press. It is the arm rebuild window: `deliver` pushes to
+  the new table's queues before the audio thread starts draining them. On old
+  `main` the same window showed zero overruns only because the packets were
+  thrown away earlier, at `deliver`. That rebuild is also an audible hiccup on
+  every membership change, which T-136 removes by making a redundant `arm` do
+  nothing.
+- Next: T-136. With `swap_slots` self-populating, the only remaining reason
+  `arm` rebuilds while already talking is gone.
