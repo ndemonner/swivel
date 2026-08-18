@@ -216,6 +216,22 @@ before you touch it.
     self-signed certificate on the release machine keeps the identity stable.
   - Accept: `scripts/build-release.sh` signs with the certificate when it is
     present and falls back to ad-hoc with a warning when it is not.
+- [~] **T-139** Team releases through CI — branch task/139-ci-release
+  - Four people must be able to release. Copying the signing key and the
+    certificate to four laptops means four theft targets and no revocation,
+    so the build moves to GitHub Actions instead. The two secrets live once,
+    in the repository's secret store.
+  - `scripts/release.sh` becomes the trigger: it bumps, commits, tags, and
+    pushes. The workflow builds the universal binary, codesigns with the
+    imported certificate, signs the artifact with the release key, and
+    publishes the GitHub release. `--local` keeps the old single-machine path
+    as a fallback for when CI is down.
+  - Accept: a collaborator with push access and no local keys can cut a
+    release by running `./scripts/release.sh <version>`.
+  - Accept: the workflow refuses a tag whose version does not match
+    Cargo.toml.
+  - Needs repository admin once, to set the secrets. wtachau does not have
+    admin, so that step is a handoff.
 
 ## M9 — Verification
 
