@@ -122,8 +122,8 @@ before you touch it.
 
 ## M7 — Command line
 
-- [ ] **T-100** `walkie key`, with `--copy`
-- [ ] **T-101** `walkie add`, `walkie list`, `walkie rm`, `walkie slot`
+- [~] **T-100** `walkie key`, with `--copy` — branch task/100-cli
+- [~] **T-101** `walkie add`, `walkie list`, `walkie rm`, `walkie slot` — branch task/100-cli
 - [ ] **T-102** `walkie doctor`: devices, sample rates, permission, relay, RTT
 - [ ] **T-103** `walkie doctor --loopback` mouth-to-ear measurement
 - [ ] **T-104** `walkie doctor --tune` suggested settings
