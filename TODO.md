@@ -1,0 +1,159 @@
+# walkie — Task List
+
+This file is the single source of truth for work in progress. Read LOOP.md
+before you touch it.
+
+## Status keys
+
+| Key | Meaning |
+|---|---|
+| `[ ]` | Open. Anyone may claim it. |
+| `[~]` | Claimed. The branch name follows the title. |
+| `[x]` | Done and merged to `main`. |
+| `[!]` | Blocked. The reason follows the title. |
+
+## Rules
+
+1. Claim a task by changing `[ ]` to `[~]` and adding your branch name.
+2. Commit that claim to `main` before you start work.
+3. Do not claim a task whose dependencies are not `[x]`.
+4. Mark `[x]` in the same commit that completes the work.
+5. Add new tasks at the end of the right milestone. Never renumber.
+
+---
+
+## M0 — Skeleton
+
+- [ ] **T-001** Cargo project, layout, `.gitignore`, `rust-toolchain.toml`
+  - Accept: the binary is named `walkie`. Accept: edition 2024.
+- [ ] **T-002** Pin and verify dependencies
+  - Accept: `cargo build` succeeds with no system package installed.
+  - Accept: libopus compiles from source through `audiopus_sys`.
+- [ ] **T-003** `config.rs` with every tunable constant in one place
+  - Accept: sample rate, frame size, buffer frames, bitrate, jitter bounds,
+    `MAX_PEERS`, ALPN, backoff table.
+- [ ] **T-004** Error type and logging setup
+  - Accept: `tracing` to stderr, `WALKIE_LOG` env filter, no logging in
+    real-time callbacks.
+
+## M1 — Identity and storage
+
+- [ ] **T-010** SQLite open, path resolution, `0600` mode, `PRAGMA user_version`
+  - Accept: `WALKIE_DB` overrides the path. Needed for two-process tests.
+- [ ] **T-011** Migration 1: the four tables in ARCHITECTURE.md §8
+- [ ] **T-012** Identity load or create. Store the iroh `SecretKey`.
+  - Accept: the same key survives a restart.
+- [ ] **T-013** `wt1` ticket encode and decode
+  - Accept: round trip test. Accept: a corrupt ticket gives a clear error.
+- [ ] **T-014** Contact CRUD and slot assignment
+  - Accept: a new contact takes the lowest free slot in 1..=9.
+  - Accept: contact 10 and beyond gets `slot = NULL`.
+  - Accept: slot reassignment swaps rather than fails.
+- [ ] **T-015** Knock table: record, approve, reject, block
+
+## M2 — Network
+
+- [ ] **T-020** Build the iroh `Endpoint` with the tuned transport config
+  - Accept: ALPN `walkie/0`. Accept: settings match ARCHITECTURE.md §4.2.
+- [ ] **T-021** Accept loop with contact authorisation
+  - Accept: a known contact is registered. Accept: an unknown id becomes a
+    knock and the connection is closed.
+  - Accept: a blocked id is dropped with no record.
+- [ ] **T-022** Per-contact supervisor with backoff and reconnect
+- [ ] **T-023** Duplicate connection tie-break by smaller dialer `EndpointId`
+  - Accept: two processes that dial each other end with exactly one connection.
+- [ ] **T-024** Control stream: framing, `Control` enum, read and write tasks
+- [ ] **T-025** Application ping and round trip time measurement
+- [ ] **T-026** Presence: derive online state, publish to `UiState`
+- [ ] **T-027** Path type reporting, `DIR` against `RLY`, from `Connection::paths`
+- [ ] **T-028** Audio datagram header encode and decode
+  - Accept: unit test for wrap-around of both counters.
+- [ ] **T-029** Datagram send path with drop-on-full behaviour
+  - Accept: `send_datagram` errors increment a counter, never block.
+- [ ] **T-030** Datagram receive task, route to the peer slot by `remote_id`
+
+## M3 — Audio
+
+- [ ] **T-040** Device enumeration, selection, and 48 kHz preference
+  - Accept: a device without 48 kHz support is reported, not crashed on.
+- [ ] **T-041** Input stream, downmix to mono, SPSC ring push
+  - Accept: no allocation in the callback. Check with a debug allocator hook.
+- [ ] **T-042** Encoder thread, 480 sample frames, one encode for all members
+- [ ] **T-043** Fixed peer slot array with preallocated decoders
+- [ ] **T-044** Output stream, decode, mix, soft limit, upmix
+- [ ] **T-045** Adaptive jitter buffer per ARCHITECTURE.md §5.4
+  - Accept: unit tests for growth, for the delayed shrink, and for reorder.
+- [ ] **T-046** Packet loss concealment and in-band FEC recovery
+- [ ] **T-047** Open and close chirps, mixed into the local output only
+- [ ] **T-048** Input and output level meters for the roster
+- [ ] **T-049** Device change handling. Rebuild streams when the default device
+  changes.
+
+## M4 — Sessions
+
+- [ ] **T-060** Session state machine and the member mesh
+- [ ] **T-061** `SessionOpen` fan-out and dial-on-demand for unknown members
+- [ ] **T-062** `SessionClose`, empty-set teardown, and the 10 minute idle timer
+- [ ] **T-063** Mute, do-not-disturb, and per-contact `auto_open`
+- [ ] **T-064** `TalkState` speaking indicator with a voice activity gate
+
+## M5 — User interface
+
+- [ ] **T-070** `NSApplication` accessory mode from a plain binary
+  - Accept: no Dock icon. Accept: it starts in under 500 ms.
+- [ ] **T-071** `NSStatusItem` with the five icon states from DESIGN.md §6.1
+- [ ] **T-072** Right-click menu: mute, DND, devices, copy key, quit
+- [ ] **T-073** `style.rs`: colour tokens, monospace font, 2 px border helper,
+  stipple shadow helper, notched section label helper
+- [ ] **T-074** The floating `NSPanel`, positioned under the status item
+- [ ] **T-075** Custom roster view: slot box, name, presence dot, RTT, path type
+- [ ] **T-076** Live row inversion and the live session summary
+- [ ] **T-077** Search and add field with `wt1` paste detection
+- [ ] **T-078** Knock approval row with `a` and `x` keys
+- [ ] **T-079** `arc-swap` `UiState` snapshot and the 10 Hz redraw timer
+- [ ] **T-080** Main-thread wake for immediate transitions
+
+## M6 — Hotkeys
+
+- [ ] **T-090** Register `⌃⌥⌘T`, `⌃⌥⌘Esc`, `⌃⌥⌘M` through `global-hotkey`
+- [ ] **T-091** Panel key window handling and digit capture in `keyDown:`
+- [ ] **T-092** Digit toggles a member in and out of the session
+- [ ] **T-093** `Esc` hides the panel and leaves the session live
+
+## M7 — Command line
+
+- [ ] **T-100** `walkie key`, with `--copy`
+- [ ] **T-101** `walkie add`, `walkie list`, `walkie rm`, `walkie slot`
+- [ ] **T-102** `walkie doctor`: devices, sample rates, permission, relay, RTT
+- [ ] **T-103** `walkie doctor --loopback` mouth-to-ear measurement
+- [ ] **T-104** `walkie doctor --tune` suggested settings
+- [ ] **T-105** `walkie tui` headless mode for two-process tests
+
+## M8 — Packaging
+
+- [ ] **T-110** `build.rs` that embeds `Info.plist` through the linker
+  - Accept: `otool -s __TEXT __info_plist` shows the plist in the binary.
+- [ ] **T-111** `scripts/build-release.sh` with ad-hoc `codesign`
+- [ ] **T-112** Release profile: `lto = "fat"`, `codegen-units = 1`, `panic` stays
+  `unwind` because the audio callbacks must not abort the process
+- [ ] **T-113** README with a two-minute quick start
+- [ ] **T-114** Universal binary for Apple Silicon and Intel
+
+## M9 — Verification
+
+- [ ] **T-120** Two-process integration test script
+- [ ] **T-121** Latency measurement harness and a recorded baseline
+- [ ] **T-122** Network shaping test with `dnctl` for delay and loss
+- [ ] **T-123** Real-time safety check. Assert no allocation in the callbacks.
+- [ ] **T-124** Twelve-hour soak test. Watch for latency creep and leaks.
+
+## Backlog — not scheduled
+
+- [ ] **B-001** Acoustic echo cancellation with `webrtc-audio-processing`
+- [ ] **B-002** A stable self-signed certificate to stop repeat TCC prompts
+- [ ] **B-003** More than nine slots with a two-digit entry mode
+- [ ] **B-004** Opus stereo or a raw PCM mode for a LAN
+- [ ] **B-005** Linux and Windows user interfaces
+- [ ] **B-006** A per-contact volume trim
+- [ ] **B-007** Two independent simultaneous sessions
+- [ ] **B-008** A push-to-talk key for people who want the microphone closed
