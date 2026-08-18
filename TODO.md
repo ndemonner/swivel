@@ -53,24 +53,24 @@ before you touch it.
 
 ## M2 — Network
 
-- [ ] **T-020** Build the iroh `Endpoint` with the tuned transport config
+- [~] **T-020** Build the iroh `Endpoint` with the tuned transport config — branch task/020-net
   - Accept: ALPN `walkie/0`. Accept: settings match ARCHITECTURE.md §4.2.
-- [ ] **T-021** Accept loop with contact authorisation
+- [~] **T-021** Accept loop with contact authorisation — branch task/020-net
   - Accept: a known contact is registered. Accept: an unknown id becomes a
     knock and the connection is closed.
   - Accept: a blocked id is dropped with no record.
-- [ ] **T-022** Per-contact supervisor with backoff and reconnect
-- [ ] **T-023** Duplicate connection tie-break by smaller dialer `EndpointId`
+- [~] **T-022** Per-contact supervisor with backoff and reconnect — branch task/020-net
+- [~] **T-023** Duplicate connection tie-break by smaller dialer `EndpointId` — branch task/020-net
   - Accept: two processes that dial each other end with exactly one connection.
-- [ ] **T-024** Control stream: framing, `Control` enum, read and write tasks
-- [ ] **T-025** Application ping and round trip time measurement
-- [ ] **T-026** Presence: derive online state, publish to `UiState`
-- [ ] **T-027** Path type reporting, `DIR` against `RLY`, from `Connection::paths`
-- [ ] **T-028** Audio datagram header encode and decode
+- [~] **T-024** Control stream: framing, `Control` enum, read and write tasks — branch task/020-net
+- [~] **T-025** Application ping and round trip time measurement — branch task/020-net
+- [~] **T-026** Presence: derive online state, publish to `UiState` — branch task/020-net
+- [~] **T-027** Path type reporting, `DIR` against `RLY`, from `Connection::paths` — branch task/020-net
+- [~] **T-028** Audio datagram header encode and decode — branch task/020-net
   - Accept: unit test for wrap-around of both counters.
-- [ ] **T-029** Datagram send path with drop-on-full behaviour
+- [~] **T-029** Datagram send path with drop-on-full behaviour — branch task/020-net
   - Accept: `send_datagram` errors increment a counter, never block.
-- [ ] **T-030** Datagram receive task, route to the peer slot by `remote_id`
+- [~] **T-030** Datagram receive task, route to the peer slot by `remote_id` — branch task/020-net
 
 ## M3 — Audio
 
