@@ -27,7 +27,7 @@ pub enum MenuAction {
     TogglePanel,
     /// A right click or a control click. Show the menu.
     ShowMenu,
-    /// The menu's own "Open walkie" item.
+    /// The menu's own "Open swivel" item.
     OpenPanel,
     ToggleMute,
     ToggleDnd,
@@ -52,7 +52,7 @@ define_class!(
     // - MenuTarget does not implement Drop.
     #[unsafe(super(NSObject))]
     #[thread_kind = MainThreadOnly]
-    #[name = "WalkieMenuTarget"]
+    #[name = "SwivelMenuTarget"]
     #[ivars = TargetIvars]
     pub struct MenuTarget;
 
@@ -203,14 +203,14 @@ impl StatusItem {
 
         // `None` marks a separator.
         let entries: [Option<(&str, Sel, &str)>; 8] = [
-            Some(("Open walkie   ⌃⌥⌘T", sel!(openPanel:), "")),
+            Some(("Open swivel   ⌃⌥⌘T", sel!(openPanel:), "")),
             None,
             Some(("Mute microphone   ⌃⌥⌘M", sel!(toggleMute:), "")),
             Some(("Do not disturb", sel!(toggleDnd:), "")),
             Some(("End session   ⌃⌥⌘⎋", sel!(endSession:), "")),
             None,
             Some(("Copy my key", sel!(copyKey:), "")),
-            Some(("Quit walkie", sel!(quit:), "q")),
+            Some(("Quit swivel", sel!(quit:), "q")),
         ];
 
         for entry in entries {

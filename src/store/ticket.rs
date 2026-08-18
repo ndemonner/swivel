@@ -14,7 +14,7 @@ use crate::error::{Error, Result};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct TicketV1 {
     /// The format version. A future format changes this first byte, so an old
-    /// build can say "you need a newer walkie" instead of failing obscurely.
+    /// build can say "you need a newer swivel" instead of failing obscurely.
     version: u8,
     /// The 32 byte Ed25519 public key.
     key: [u8; 32],
@@ -40,7 +40,7 @@ impl Ticket {
         }
     }
 
-    /// Encodes the ticket as a `wt1…` string.
+    /// Encodes the ticket as a `sv1…` string.
     pub fn encode(&self) -> String {
         let body = TicketV1 {
             version: VERSION,
@@ -56,7 +56,7 @@ impl Ticket {
         )
     }
 
-    /// Decodes a `wt1…` string.
+    /// Decodes a `sv1…` string.
     ///
     /// The input is trimmed and case is ignored, because a ticket travels
     /// through chat applications that reformat text.
@@ -80,7 +80,7 @@ impl Ticket {
         if decoded.version != VERSION {
             return Err(Error::Ticket(format!(
                 "the key is format version {}, and this build reads version {VERSION}. \
-                 Use a newer walkie.",
+                 Use a newer swivel.",
                 decoded.version
             )));
         }
@@ -114,7 +114,7 @@ mod tests {
     fn a_ticket_survives_a_round_trip() {
         let ticket = Ticket::new(some_id(), "Maggie Henry");
         let text = ticket.encode();
-        assert!(text.starts_with("wt1"));
+        assert!(text.starts_with("sv1"));
         assert_eq!(Ticket::decode(&text).unwrap(), ticket);
     }
 
@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn a_bad_character_says_so() {
-        let e = Ticket::decode("wt1!!!!").unwrap_err();
+        let e = Ticket::decode("sv1!!!!").unwrap_err();
         assert!(e.to_string().contains("damaged or incomplete"), "{e}");
     }
 

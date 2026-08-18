@@ -37,6 +37,8 @@ pub enum Action {
     Close,
     /// Return was pressed in the search and add field.
     Submit,
+    /// Put your own key on the clipboard.
+    CopyKey,
 }
 
 /// The data the view draws, and the channel it reports to.
@@ -53,7 +55,7 @@ define_class!(
     // - RosterView does not implement Drop.
     #[unsafe(super(NSView))]
     #[thread_kind = MainThreadOnly]
-    #[name = "WalkieRosterView"]
+    #[name = "SwivelRosterView"]
     #[ivars = RosterIvars]
     pub struct RosterView;
 
@@ -79,6 +81,23 @@ define_class!(
         #[unsafe(method(keyDown:))]
         fn key_down(&self, event: &NSEvent) {
             self.handle_key(event);
+        }
+
+        /// Clicking the roster takes focus back from the search field, so
+        /// digits work again without pressing escape first.
+        #[unsafe(method(mouseDown:))]
+        fn mouse_down(&self, _event: &NSEvent) {
+            if let Some(window) = self.window() {
+                window.makeFirstResponder(Some(self));
+            }
+        }
+
+        /// Accept the click that activates the application, rather than
+        /// swallowing it. Otherwise the first click after the panel appears
+        /// does nothing.
+        #[unsafe(method(acceptsFirstMouse:))]
+        fn accepts_first_mouse(&self, _event: Option<&NSEvent>) -> bool {
+            true
         }
     }
 );
@@ -116,7 +135,7 @@ impl RosterView {
 
     /// The peers the filter lets through.
     ///
-    /// A `wt1` key in the field is not a search, so it hides nobody. The field
+    /// A `sv1` key in the field is not a search, so it hides nobody. The field
     /// does two jobs and this is where they part.
     fn visible_peers<'a>(&self, state: &'a UiState) -> Vec<&'a crate::state::PeerView> {
         let filter = self.ivars().filter.borrow();
@@ -155,6 +174,7 @@ impl RosterView {
             '/' => self.send(Action::FocusField),
             'a' | 'A' => self.send(Action::ApproveFirstKnock),
             'x' | 'X' => self.send(Action::RejectFirstKnock),
+            'c' | 'C' => self.send(Action::CopyKey),
             '0' => self.send(Action::EndSession),
             _ => {}
         }
@@ -245,7 +265,11 @@ impl RosterView {
         let shown = self.visible_peers(&state);
 
         if shown.is_empty() {
-            return height + 4.0 * 18.0 + 20.0 + style::MARGIN;
+            if !self.ivars().filter.borrow().is_empty() && !state.peers.is_empty() {
+                return height + 40.0 + style::MARGIN;
+            }
+            // The empty state carries the key box.
+            return height + 12.0 + 26.0 + style::KEY_BOX_HEIGHT + 14.0 + 26.0 + style::MARGIN;
         }
 
         let live = shown.iter().filter(|p| p.live).count();
@@ -263,7 +287,7 @@ impl RosterView {
     }
 
     fn draw_header(&self, state: &UiState, x: f64, y: f64, width: f64) -> f64 {
-        style::section("walkie", NSPoint::new(x, y + 6.0), width);
+        style::section("swivel", NSPoint::new(x, y + 6.0), width);
 
         let status = match (state.online, state.dnd, state.mic) {
             (false, ..) => "connecting".to_string(),
@@ -302,33 +326,104 @@ impl RosterView {
     fn draw_empty(&self, state: &UiState, x: f64, y: f64, width: f64) {
         let searching = !self.ivars().filter.borrow().is_empty() && !state.peers.is_empty();
 
-        let lines = if searching {
-            [
-                "Nobody matches that.",
-                "",
-                "Clear the field to see everyone.",
-                "",
-            ]
-        } else {
-            [
-                "No contacts yet.",
-                "",
-                "Share your key:   walkie key",
-                "Add theirs:       paste it above",
-            ]
-        };
-
-        let mut row = y + 20.0;
-        for line in lines {
+        if searching {
             style::text(
-                line,
-                NSRect::new(NSPoint::new(x, row), NSSize::new(width, 18.0)),
+                "Nobody matches that.",
+                NSRect::new(NSPoint::new(x, y + 20.0), NSSize::new(width, 18.0)),
                 &style::mono(style::SIZE_BODY),
                 &style::muted_ink(),
                 NSTextAlignment::Left,
             );
-            row += 18.0;
+            return;
         }
+
+        let mut row = y + 12.0;
+
+        style::text(
+            "No contacts yet. Send someone this key.",
+            NSRect::new(NSPoint::new(x, row), NSSize::new(width, 18.0)),
+            &style::mono(style::SIZE_BODY),
+            &style::muted_ink(),
+            NSTextAlignment::Left,
+        );
+        row += 26.0;
+
+        // The key itself, not an instruction to go and run a command. Telling
+        // someone to open a terminal to read a value the application already
+        // holds is not an interface.
+        row = self.draw_key(state, x, row, width);
+        row += 14.0;
+
+        style::text(
+            "Then paste theirs above.",
+            NSRect::new(NSPoint::new(x, row), NSSize::new(width, 18.0)),
+            &style::mono(style::SIZE_BODY),
+            &style::muted_ink(),
+            NSTextAlignment::Left,
+        );
+    }
+
+    /// Draws your own key in a box, with the shortcut that copies it.
+    ///
+    /// Returns the y below the box.
+    fn draw_key(&self, state: &UiState, x: f64, y: f64, width: f64) -> f64 {
+        let key = if state.my_key.is_empty() {
+            "…"
+        } else {
+            state.my_key.as_str()
+        };
+
+        let box_rect = NSRect::new(
+            NSPoint::new(x, y),
+            NSSize::new(width, style::KEY_BOX_HEIGHT),
+        );
+        style::box_filled(box_rect, &style::card());
+
+        // A key is 63 characters and does not fit the panel on one line, so it
+        // is split across two. It is never truncated: a key you cannot read in
+        // full is a key you cannot pass on.
+        let mut line_top = y + 7.0;
+        let mut rest = key;
+        while !rest.is_empty() {
+            let take = rest
+                .char_indices()
+                .nth(style::KEY_CHARS_PER_LINE)
+                .map(|(i, _)| i)
+                .unwrap_or(rest.len());
+            let (line, remainder) = rest.split_at(take);
+            rest = remainder;
+
+            style::text(
+                line,
+                NSRect::new(
+                    NSPoint::new(x + 8.0, line_top),
+                    NSSize::new(width - 16.0, 14.0),
+                ),
+                &style::mono(style::SIZE_LABEL),
+                &style::ink(),
+                NSTextAlignment::Left,
+            );
+            line_top += 14.0;
+        }
+
+        let (hint, colour) = if state.key_copied {
+            ("copied", style::online())
+        } else {
+            ("press c to copy", style::muted_ink())
+        };
+
+        style::text(
+            hint,
+            NSRect::new(
+                NSPoint::new(x + 8.0, y + style::KEY_BOX_HEIGHT - 18.0),
+                NSSize::new(width - 16.0, 14.0),
+            ),
+            &style::mono(style::SIZE_LABEL),
+            &colour,
+            NSTextAlignment::Right,
+        );
+
+        y + style::KEY_BOX_HEIGHT
     }
 
     fn draw_knocks(&self, state: &UiState, x: f64, y: f64, width: f64) -> f64 {

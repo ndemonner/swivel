@@ -49,7 +49,7 @@ pub struct App {
     /// Round trip probes still in flight, keyed by peer and nonce.
     pub pending_pings: Mutex<HashMap<(EndpointId, u64), Instant>>,
 
-    /// Datagrams refused by the parser. Exposed by `walkie doctor`.
+    /// Datagrams refused by the parser. Exposed by `swivel doctor`.
     pub bad_datagrams: AtomicU64,
 
     /// The user refuses incoming sessions.
@@ -74,6 +74,9 @@ pub struct App {
     /// When the microphone was last armed. A `std` lock, because `arm` is
     /// called from the main thread and cannot await.
     armed_at: std::sync::Mutex<Option<Instant>>,
+
+    /// Set for a few seconds after the key is copied, so the panel can say so.
+    key_copied: std::sync::atomic::AtomicBool,
 }
 
 impl App {
@@ -132,6 +135,7 @@ impl App {
             last_reported_voice: std::sync::atomic::AtomicBool::new(false),
             supervise_tx,
             armed_at: std::sync::Mutex::new(None),
+            key_copied: std::sync::atomic::AtomicBool::new(false),
         });
 
         app.refresh_ui().await;
@@ -150,7 +154,7 @@ impl App {
     /// Starts a supervisor for every contact that does not have one.
     ///
     /// This also runs on a timer, so a contact added by a second process, such
-    /// as `walkie add` in another terminal, is picked up without a restart.
+    /// as `swivel add` in another terminal, is picked up without a restart.
     pub async fn supervise_contacts(self: &Arc<Self>) -> Result<()> {
         let contacts = self.store.lock().await.contacts()?;
         for contact in contacts {
@@ -255,6 +259,19 @@ impl App {
     /// True while the input device is open.
     pub fn mic_is_open(&self) -> bool {
         self.engine.as_ref().is_some_and(|e| e.armed())
+    }
+
+    /// Records that the key was just copied, and clears it after a moment.
+    pub fn note_key_copied(self: &Arc<Self>) {
+        self.key_copied.store(true, Ordering::Relaxed);
+
+        let app = self.clone();
+        tokio::spawn(async move {
+            app.refresh_ui().await;
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            app.key_copied.store(false, Ordering::Relaxed);
+            app.refresh_ui().await;
+        });
     }
 
     /// The devices in use.
@@ -946,6 +963,8 @@ impl App {
         self.state.store(UiState {
             my_name: self.identity.name.clone(),
             my_id: Some(self.me),
+            my_key: self.my_ticket(),
+            key_copied: self.key_copied.load(Ordering::Relaxed),
             online,
             peers,
             knocks,

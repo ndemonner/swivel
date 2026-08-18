@@ -3514,6 +3514,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
+name = "swivel"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arc-swap",
+ "bytes",
+ "clap",
+ "cpal",
+ "crossbeam-channel",
+ "data-encoding",
+ "global-hotkey",
+ "iroh",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "opus",
+ "postcard",
+ "rand 0.9.5",
+ "ringbuf",
+ "rusqlite",
+ "serde",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "syn"
 version = "2.0.119"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4019,35 +4048,6 @@ checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
 dependencies = [
  "same-file",
  "winapi-util",
-]
-
-[[package]]
-name = "walkie"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arc-swap",
- "bytes",
- "clap",
- "cpal",
- "crossbeam-channel",
- "data-encoding",
- "global-hotkey",
- "iroh",
- "objc2",
- "objc2-app-kit",
- "objc2-foundation",
- "opus",
- "postcard",
- "rand 0.9.5",
- "ringbuf",
- "rusqlite",
- "serde",
- "thiserror 2.0.20",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

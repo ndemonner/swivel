@@ -1,4 +1,4 @@
-//! `walkie doctor` — check this machine.
+//! `swivel doctor` — check this machine.
 //!
 //! The product is sent to friends as a bare binary. When it does not work, this
 //! is the only diagnostic they have. It must be honest about latency rather
@@ -20,7 +20,7 @@ use super::fmt::{Table, box_line};
 /// Runs the checks.
 pub fn run(loopback: bool, tune: bool) -> Result<()> {
     println!();
-    println!("{}", box_line::label("WALKIE DOCTOR"));
+    println!("{}", box_line::label("SWIVEL DOCTOR"));
 
     let mut faults = Vec::new();
 

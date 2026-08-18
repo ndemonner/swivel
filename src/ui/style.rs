@@ -54,6 +54,16 @@ pub const SLOT_BOX: f64 = 28.0;
 /// The search and add field.
 pub const FIELD_HEIGHT: f64 = 34.0;
 
+/// The box that shows your own key. Two lines of key, plus the copy hint.
+pub const KEY_BOX_HEIGHT: f64 = 58.0;
+
+/// How many key characters fit on one line inside the key box.
+///
+/// A key is 63 characters, which does not fit the panel width on one line at
+/// the label size. Truncating it would be worse than useless: a key you cannot
+/// read in full is a key you cannot pass on.
+pub const KEY_CHARS_PER_LINE: usize = 32;
+
 /// The gap between a section label and its rule.
 pub const LABEL_GAP: f64 = 8.0;
 

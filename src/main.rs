@@ -1,4 +1,4 @@
-//! walkie — a peer-to-peer low-latency voice intercom.
+//! swivel — a peer-to-peer low-latency voice intercom.
 //!
 //! Read `LOOP.md` before you change this crate.
 
@@ -25,7 +25,7 @@ use crate::error::Result;
 
 #[derive(Parser)]
 #[command(
-    name = "walkie",
+    name = "swivel",
     version,
     about = "Peer-to-peer push-to-talk. No accounts. No calls.",
     long_about = None,
@@ -96,7 +96,7 @@ enum Command {
     #[cfg(target_os = "macos")]
     Snapshot {
         /// Where to write the image.
-        #[arg(long, default_value = "walkie-panel.png")]
+        #[arg(long, default_value = "swivel-panel.png")]
         out: std::path::PathBuf,
         /// Fill the roster with every state worth looking at.
         #[arg(long)]
@@ -111,7 +111,7 @@ fn main() {
     logging::init();
 
     if let Err(e) = run() {
-        eprintln!("walkie: {e}");
+        eprintln!("swivel: {e}");
         let mut source = std::error::Error::source(&e);
         while let Some(s) = source {
             eprintln!("  caused by: {s}");

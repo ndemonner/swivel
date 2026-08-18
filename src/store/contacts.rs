@@ -27,7 +27,7 @@ impl Store {
     /// Adds a contact and gives it the lowest free slot.
     ///
     /// Adding a contact that already exists updates the name and returns the
-    /// existing record. This makes `walkie add` safe to run twice.
+    /// existing record. This makes `swivel add` safe to run twice.
     pub fn add_contact(&self, endpoint_id: EndpointId, name: &str) -> Result<Contact> {
         if let Some(existing) = self.contact(endpoint_id)? {
             if existing.name != name {
@@ -100,7 +100,7 @@ impl Store {
 
     /// Finds a contact by slot number, by name, or by the start of a key.
     ///
-    /// This backs `walkie rm 3` and `walkie rm maggie`.
+    /// This backs `swivel rm 3` and `swivel rm maggie`.
     pub fn find_contact(&self, needle: &str) -> Result<Contact> {
         let needle = needle.trim();
 

@@ -1,6 +1,6 @@
 //! Sample rate conversion.
 //!
-//! Everything in `walkie` runs at 48 kHz. Plenty of devices do not. A Bluetooth
+//! Everything in `swivel` runs at 48 kHz. Plenty of devices do not. A Bluetooth
 //! headset commonly runs at 44.1 kHz, and feeding it 48 kHz audio without
 //! converting plays everything about 8 percent slow and drops one frame in
 //! twelve. That is not a subtle fault, and it is the default experience for

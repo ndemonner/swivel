@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleName</key>
-  <string>walkie</string>
+  <string>swivel</string>
   <key>CFBundleDisplayName</key>
-  <string>walkie</string>
+  <string>swivel</string>
   <key>CFBundleIdentifier</key>
-  <string>dev.motor.walkie</string>
+  <string>dev.motor.swivel</string>
   <key>CFBundleVersion</key>
   <string>0.1.0</string>
   <key>CFBundleShortVersionString</key>
@@ -25,6 +25,6 @@
   <!-- macOS refuses the microphone without this string, and it is what the
        permission prompt shows the user. -->
   <key>NSMicrophoneUsageDescription</key>
-  <string>walkie needs the microphone so your contacts can hear you.</string>
+  <string>swivel needs the microphone so your contacts can hear you.</string>
 </dict>
 </plist>

@@ -96,7 +96,7 @@ impl Store {
 
 /// A reasonable first name for a new install. The user can change it.
 pub fn default_name() -> String {
-    std::env::var("USER").unwrap_or_else(|_| "walkie".to_string())
+    std::env::var("USER").unwrap_or_else(|_| "swivel".to_string())
 }
 
 #[cfg(test)]

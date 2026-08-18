@@ -15,7 +15,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 TARGET_DIR=${CARGO_TARGET_DIR:-target}
-BINARY="$TARGET_DIR/release/walkie"
+BINARY="$TARGET_DIR/release/swivel"
 
 echo "==> building"
 cargo build --release
@@ -40,7 +40,7 @@ echo
 echo "==> $BINARY ($SIZE)"
 echo
 echo "Send that one file to a friend. They run:"
-echo "    chmod +x walkie"
-echo "    xattr -d com.apple.quarantine walkie   # only if it came through a browser"
-echo "    ./walkie doctor"
+echo "    chmod +x swivel"
+echo "    xattr -d com.apple.quarantine swivel   # only if it came through a browser"
+echo "    ./swivel doctor"
 echo

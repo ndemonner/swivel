@@ -1,5 +1,5 @@
 [package]
-name = "walkie"
+name = "swivel"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.90"
@@ -7,7 +7,7 @@ description = "Peer-to-peer low-latency voice intercom"
 license = "MIT"
 
 [[bin]]
-name = "walkie"
+name = "swivel"
 path = "src/main.rs"
 
 [dependencies]

@@ -40,6 +40,8 @@ pub enum Command {
     ToggleDnd,
     /// Close the microphone, but only if no session is using it.
     DisarmIfIdle,
+    /// The key was copied. The panel says so for a moment.
+    NoteKeyCopied,
     /// Choose an audio device. `None` follows the system default.
     SetDevice {
         direction: Direction,
@@ -83,7 +85,7 @@ define_class!(
     // - Ticker does not implement Drop.
     #[unsafe(super(NSObject))]
     #[thread_kind = MainThreadOnly]
-    #[name = "WalkieTicker"]
+    #[name = "SwivelTicker"]
     #[ivars = ()]
     struct Ticker;
 
@@ -120,7 +122,7 @@ pub fn run() -> Result<()> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
-        .thread_name("walkie-net")
+        .thread_name("swivel-net")
         .build()?;
     let runtime = Box::leak(Box::new(runtime));
 
@@ -176,7 +178,7 @@ pub fn run() -> Result<()> {
         hotkeys,
         commands,
         mtm,
-        open_on_first_tick: Cell::new(std::env::var_os("WALKIE_PANEL_ON_START").is_some()),
+        open_on_first_tick: Cell::new(std::env::var_os("SWIVEL_PANEL_ON_START").is_some()),
     });
 
     UI.with(|slot| *slot.borrow_mut() = Some(ui.clone()));
@@ -198,7 +200,7 @@ pub fn run() -> Result<()> {
     ui.tick();
     info!(
         status_button = ui.status.has_button(),
-        "walkie is in the menu bar"
+        "swivel is in the menu bar"
     );
 
     ns_app.run();
@@ -288,6 +290,7 @@ impl Ui {
             Action::RejectFirstKnock => self.send(Command::RejectFirst),
             Action::FocusField => self.panel.focus_field(),
             Action::Submit => self.submit_field(),
+            Action::CopyKey => self.copy_key(),
             Action::Close => {
                 // Escape hides the panel. It never ends the session, because a
                 // conversation must not stop because a window closed.
@@ -383,6 +386,7 @@ impl Ui {
             pasteboard.setString_forType(&NSString::from_str(&ticket), NSPasteboardTypeString);
         }
         info!("your key is on the clipboard");
+        self.send(Command::NoteKeyCopied);
     }
 }
 
@@ -403,6 +407,7 @@ async fn handle_commands(app: Arc<App>, mut rx: tokio::sync::mpsc::UnboundedRece
                 app.set_dnd(dnd).await;
             }
             Command::DisarmIfIdle => app.disarm_if_idle().await,
+            Command::NoteKeyCopied => app.note_key_copied(),
             Command::SetDevice { direction, name } => {
                 if let Err(e) = app.set_device(direction, name.as_deref()).await {
                     warn!("cannot change the audio device: {e}");

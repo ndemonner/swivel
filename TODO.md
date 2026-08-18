@@ -1,4 +1,4 @@
-# walkie — Task List
+# swivel — Task List
 
 This file is the single source of truth for work in progress. Read LOOP.md
 before you touch it.
@@ -25,7 +25,7 @@ before you touch it.
 ## M0 — Skeleton
 
 - [x] **T-001** Cargo project, layout, `.gitignore`, `rust-toolchain.toml`
-  - Accept: the binary is named `walkie`. Accept: edition 2024.
+  - Accept: the binary is named `swivel`. Accept: edition 2024.
 - [x] **T-002** Pin and verify dependencies
   - Accept: `cargo build` succeeds with no system package installed.
   - Accept: libopus compiles from source through `audiopus_sys`.
@@ -33,17 +33,17 @@ before you touch it.
   - Accept: sample rate, frame size, buffer frames, bitrate, jitter bounds,
     `MAX_PEERS`, ALPN, backoff table.
 - [x] **T-004** Error type and logging setup
-  - Accept: `tracing` to stderr, `WALKIE_LOG` env filter, no logging in
+  - Accept: `tracing` to stderr, `SWIVEL_LOG` env filter, no logging in
     real-time callbacks.
 
 ## M1 — Identity and storage
 
 - [x] **T-010** SQLite open, path resolution, `0600` mode, `PRAGMA user_version`
-  - Accept: `WALKIE_DB` overrides the path. Needed for two-process tests.
+  - Accept: `SWIVEL_DB` overrides the path. Needed for two-process tests.
 - [x] **T-011** Migration 1: the four tables in ARCHITECTURE.md §8
 - [x] **T-012** Identity load or create. Store the iroh `SecretKey`.
   - Accept: the same key survives a restart.
-- [x] **T-013** `wt1` ticket encode and decode
+- [x] **T-013** `sv1` ticket encode and decode
   - Accept: round trip test. Accept: a corrupt ticket gives a clear error.
 - [x] **T-014** Contact CRUD and slot assignment
   - Accept: a new contact takes the lowest free slot in 1..=9.
@@ -54,7 +54,7 @@ before you touch it.
 ## M2 — Network
 
 - [x] **T-020** Build the iroh `Endpoint` with the tuned transport config
-  - Accept: ALPN `walkie/0`. Accept: settings match ARCHITECTURE.md §4.2.
+  - Accept: ALPN `swivel/0`. Accept: settings match ARCHITECTURE.md §4.2.
 - [x] **T-021** Accept loop with contact authorisation
   - Accept: a known contact is registered. Accept: an unknown id becomes a
     knock and the connection is closed.
@@ -89,6 +89,11 @@ before you touch it.
   - Accept: unit tests for growth, for the delayed shrink, and for reorder.
 - [x] **T-046** Packet loss concealment and in-band FEC recovery
 - [x] **T-047** Fault tone, mixed into the local output only
+- [x] **T-130** Rename the product to `swivel`
+- [x] **T-132** Show the key in the panel and copy it with `c`
+- [x] **T-133** Let the panel become the key window
+  - A borderless `NSPanel` returns `canBecomeKeyWindow == false`, so digits went
+    nowhere and the search field could not be clicked into.
   - Note: there is deliberately no tone when the microphone opens or closes.
     Opening a microphone must feel seamless. See DESIGN.md §7.
 - [ ] **T-048** Input and output level meters for the roster
@@ -96,7 +101,7 @@ before you touch it.
   changes.
 - [x] **T-050** Choose the input and output device, rather than always using the
   system default
-  - Accept: `walkie devices` lists them. `walkie devices --in <n> --out <n>`
+  - Accept: `swivel devices` lists them. `swivel devices --in <n> --out <n>`
     sets them.
   - Accept: the choice is stored in the `settings` table and survives a restart.
   - Accept: a stored device that has gone away falls back to the system default
@@ -124,7 +129,7 @@ before you touch it.
 - [x] **T-074** The floating `NSPanel`, positioned under the status item
 - [x] **T-075** Custom roster view: slot box, name, presence dot, RTT, path type
 - [x] **T-076** Live row inversion and the live session summary
-- [x] **T-077** Search and add field with `wt1` paste detection
+- [x] **T-077** Search and add field with `sv1` paste detection
 - [x] **T-078** Knock approval row with `a` and `x` keys
 - [x] **T-079** `arc-swap` `UiState` snapshot and the 10 Hz redraw timer
 - [ ] **T-080** Main-thread wake for immediate transitions
@@ -140,12 +145,12 @@ before you touch it.
 
 ## M7 — Command line
 
-- [x] **T-100** `walkie key`, with `--copy`
-- [x] **T-101** `walkie add`, `list`, `rm`, `slot`, `approve`, `block`
-- [x] **T-102** `walkie doctor`: devices, sample rates, permission, relay, RTT
-- [ ] **T-103** `walkie doctor --loopback` mouth-to-ear measurement
-- [ ] **T-104** `walkie doctor --tune` suggested settings
-- [x] **T-105** `walkie tui` headless mode for two-process tests
+- [x] **T-100** `swivel key`, with `--copy`
+- [x] **T-101** `swivel add`, `list`, `rm`, `slot`, `approve`, `block`
+- [x] **T-102** `swivel doctor`: devices, sample rates, permission, relay, RTT
+- [ ] **T-103** `swivel doctor --loopback` mouth-to-ear measurement
+- [ ] **T-104** `swivel doctor --tune` suggested settings
+- [x] **T-105** `swivel tui` headless mode for two-process tests
 
 ## M8 — Packaging
 
@@ -161,7 +166,7 @@ before you touch it.
 
 - [ ] **T-127** Quit from the keyboard, for when the menu bar is unreachable
   - Note: a menu bar manager can hide the icon, and then the only way out is
-    `pkill walkie`.
+    `pkill swivel`.
 
 - [ ] **T-120** Two-process integration test script
 - [ ] **T-121** Latency measurement harness and a recorded baseline
@@ -171,6 +176,9 @@ before you touch it.
 - [ ] **T-125** Debug allocator hook that fails a test on allocation in a
   real-time callback
 - [ ] **T-126** Remove the crate-level `allow(dead_code)` from `main.rs`
+- [ ] **T-131** Remove the identity migration from the former name `walkie`
+  - It lives in `store::adopt_former_name`. Drop it once nobody is on the old
+    name.
 
 ## Backlog — not scheduled
 

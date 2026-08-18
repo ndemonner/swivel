@@ -1,11 +1,11 @@
-# LOOP.md — How to work on walkie
+# LOOP.md — How to work on swivel
 
 This file tells an agent how to run one work session. Follow it in order.
 Do not skip step 1.
 
 ## 0. What this product is
 
-`walkie` is a peer-to-peer voice intercom. A user presses a shortcut, presses a
+`swivel` is a peer-to-peer voice intercom. A user presses a shortcut, presses a
 contact number, and speaks. Latency is the product.
 
 Read these before you write code:
@@ -105,8 +105,8 @@ cargo build --release
 If the task touches audio or network behaviour, also run the two-process test:
 
 ```bash
-WALKIE_DB=/tmp/walkie-a.db cargo run -- tui &
-WALKIE_DB=/tmp/walkie-b.db cargo run -- tui &
+SWIVEL_DB=/tmp/swivel-a.db cargo run -- tui &
+SWIVEL_DB=/tmp/swivel-b.db cargo run -- tui &
 # add each to the other, confirm presence goes online
 ```
 
@@ -118,12 +118,12 @@ cargo run -- snapshot --demo --out /tmp/panel.png        # every state
 cargo run -- snapshot --demo --live --out /tmp/live.png  # a live session
 ```
 
-`walkie snapshot` renders the panel from inside the process and writes a PNG.
+`swivel snapshot` renders the panel from inside the process and writes a PNG.
 Use it rather than `screencapture`. A terminal without the screen recording
 permission captures the desktop with every window missing, and the result looks
 like the application failed to draw when it drew correctly.
 
-`WALKIE_PANEL_ON_START=1 cargo run` opens the panel on launch, for the cases a
+`SWIVEL_PANEL_ON_START=1 cargo run` opens the panel on launch, for the cases a
 snapshot cannot show.
 
 ## 6. Commit

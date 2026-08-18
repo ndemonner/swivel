@@ -10,13 +10,13 @@ use std::time::Duration;
 // ---------------------------------------------------------------------------
 
 /// The QUIC application protocol name. Bump the number on a breaking change.
-pub const ALPN: &[u8] = b"walkie/0";
+pub const ALPN: &[u8] = b"swivel/0";
 
 /// The control protocol version sent in `Control::Hello`.
 pub const PROTOCOL_VERSION: u16 = 1;
 
 /// The human readable prefix of a shareable ticket.
-pub const TICKET_PREFIX: &str = "wt1";
+pub const TICKET_PREFIX: &str = "sv1";
 
 // ---------------------------------------------------------------------------
 // Audio format
