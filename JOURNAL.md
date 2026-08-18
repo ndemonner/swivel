@@ -155,3 +155,32 @@ Newest entries at the bottom. Keep entries short. Record surprises.
 - Note: `pkill walkie` is the fallback when the menu bar icon is unreachable.
   T-127 tracks a keyboard quit.
 - Next: M7 remaining commands, then M8 packaging.
+
+## 2026-08-18 — T-052. The bug that sounded fine.
+
+- **Playback ran at 44100/48000 of the correct speed on Bluetooth headphones,
+  and nothing errored.** Audio worked. It sounded almost right. The only
+  evidence was the `played` counter falling behind `sent` by a steady 8.2
+  percent.
+- How it was found: after the session work, `played` was 65 frames behind
+  `sent` where it had been 1 frame behind. The instinct was to call it a
+  startup cost and move on. Sampling the counters three times five seconds
+  apart showed the gap **growing** at a constant rate, and a constant ratio is
+  never a startup cost. 0.918 is 44100/48000.
+- Root cause: `device::choose` correctly reported `native_rate = false` for a
+  44.1 kHz device, and `walkie doctor` correctly printed a fault about it. The
+  code then did nothing with that fact and fed 48 kHz audio to the device
+  anyway. `ARCHITECTURE.md` claimed the pipeline resampled with `rubato`. It
+  did not. **A document is not an implementation.**
+- Fix: `audio/resample.rs`, a Catmull-Rom cubic that runs inside the callback.
+  It allocates nothing, costs a few multiplies per sample, and adds no block of
+  latency. `rubato` has better stopband rejection but cannot run in a real-time
+  callback without a block delay.
+- Confirmed: `played` now tracks `sent` exactly. 621/621, 1221/1222, 1622/1622,
+  zero concealed.
+- Lesson worth keeping: **the positive counter caught this and no error path
+  ever would.** Every other counter reports a failure, and there was no failure
+  here. If `played` did not exist, this would have shipped, and the report
+  would have been "it sounds a bit off" from someone on AirPods.
+- Lesson two: a Bluetooth headset at 44.1 kHz is the common case, not an edge
+  case. Test on the hardware people actually own.

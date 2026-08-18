@@ -24,6 +24,7 @@ use crate::error::{Error, Result};
 use super::chirp::ChirpPlayer;
 use super::jitter::{Buffer, Decision};
 use super::packet::{PacketConsumer, SlotTable, drain};
+use super::resample::Resampler;
 
 /// Everything one peer needs on the callback side.
 ///
@@ -85,10 +86,20 @@ pub fn open(
     }
 
     let mut mix = vec![0f32; FRAME_SAMPLES];
-    // How much of `mix` has already been written to the device. A device buffer
-    // is rarely a whole number of 10 ms frames, so a frame is carried across
-    // callbacks.
+    // How much of `mix` has already been consumed. A device buffer is rarely a
+    // whole number of 10 ms frames, so a frame is carried across callbacks.
     let mut mix_position = FRAME_SAMPLES;
+
+    // The mix is always 48 kHz. The device may not be. A Bluetooth headset
+    // usually runs at 44.1 kHz, and sending it 48 kHz audio plays everything
+    // about 8 percent slow while the jitter buffer overflows behind it.
+    let mut resampler = Resampler::new(SAMPLE_RATE, config.sample_rate);
+    if !resampler.is_passthrough() {
+        tracing::info!(
+            device_rate = config.sample_rate,
+            "the speaker does not run at 48 kHz, so the output is converted"
+        );
+    }
 
     let callback_level = level.clone();
 
@@ -100,13 +111,20 @@ pub fn open(
                 let mut peak = 0f32;
 
                 for out_frame in output.chunks_mut(channels) {
-                    if mix_position >= FRAME_SAMPLES {
-                        mix_frame(&mut playback_slots, &slots, &chirps, &mut mix);
-                        mix_position = 0;
-                    }
+                    // Pull one sample at the device's rate. The converter asks
+                    // for 48 kHz samples as it needs them, and a new frame is
+                    // mixed only when the previous one runs out.
+                    let mut next_mix_sample = || {
+                        if mix_position >= FRAME_SAMPLES {
+                            mix_frame(&mut playback_slots, &slots, &chirps, &mut mix);
+                            mix_position = 0;
+                        }
+                        let sample = mix[mix_position];
+                        mix_position += 1;
+                        Some(sample)
+                    };
 
-                    let sample = mix[mix_position];
-                    mix_position += 1;
+                    let sample = resampler.next(&mut next_mix_sample).unwrap_or(0.0);
 
                     let magnitude = sample.abs();
                     if magnitude > peak {
