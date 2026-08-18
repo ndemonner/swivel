@@ -581,6 +581,17 @@ uploads two assets, `swivel` and `swivel.sig`.
 `SWIVEL_UPDATE_BASE` overrides the release host. It exists for tests, which
 run against a local server that mimics the two GitHub endpoints.
 
+**Who can release.** Any collaborator with push access. `scripts/release.sh`
+bumps, commits, tags, and pushes; the `release` workflow
+(`.github/workflows/release.yml`) builds, codesigns, signs with the release
+key, and publishes. The two keys live once, as repository secrets
+(`RELEASE_SIGNING_KEY`, `CODESIGN_P12`, `CODESIGN_P12_PASSWORD`), set by a
+repository admin, not copied to contributor machines. The workflow refuses a
+tag whose version does not match `Cargo.toml`. The consequence to know: anyone
+who can change the workflow file or the secrets can ship a release, so
+repository admin is the release trust boundary. `release.sh --local` keeps the
+single-machine path as a fallback for the key holder when CI is down.
+
 ## 10. Testing
 
 1. **Unit.** Ticket round trip, slot assignment, jitter buffer decisions, wire
