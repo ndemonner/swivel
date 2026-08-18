@@ -51,3 +51,42 @@ Newest entries at the bottom. Keep entries short. Record surprises.
   from the hot path. `Peer::connection` exists for that.
 - Next: M3 audio. T-029 was released back to open because the drop-on-full
   behaviour belongs with the encoder thread in T-042.
+
+## 2026-08-18 — M3 audio engine
+
+- Did: T-040..T-047, T-029, T-102. Capture, encode, jitter buffer, decode, mix,
+  limiter, fault tone, and `walkie doctor`.
+- Measured on this machine: Opus encode is **0.05 ms** per 10 ms frame at
+  complexity 8, against a 10 ms budget. The packet is 81 bytes. The fixed
+  latency total is **41.1 ms**, which matches ARCHITECTURE.md §7 exactly.
+- Decision: the Opus encode runs **inside** the input callback. libopus
+  allocates its state once at creation, so it obeys the real-time rules, and
+  encoding there removes a thread hand-off worth hundreds of microseconds. The
+  callback must not send, so encoded frames go to a lock-free queue and a normal
+  thread does the network work.
+- Decision: the **speaker stays open for the life of the process, and the
+  microphone opens on demand**. Two reasons. An intercom must be reachable at
+  any moment, so the output can never close. And if the input ran all the time,
+  the macOS microphone indicator would be permanently lit and would stop
+  telling the user anything.
+- Decision: **no tone when the microphone opens or closes.** The user asked for
+  it to be seamless. The menu bar state and mute carry that job. Only a device
+  fault makes a sound, because that is the case the interface cannot cover.
+- Surprise: a `tanh` limiter with a ceiling of 1.0 reaches exactly 1.0 in `f32`
+  for a loud input, which still clips once a device adds gain. The ceiling is
+  now 0.98.
+- Surprise: CoreAudio reports "External Headphones" as `DeviceType::Unknown`.
+  Treating Unknown as a loudspeaker made `doctor` warn about echo on a correct
+  setup. A warning that fires on the right answer teaches users to ignore
+  warnings, so only a real `Speaker` is reported now.
+- Surprise: the first `doctor` run captured 0 frames. That was the macOS
+  permission prompt, not a bug. The second run captured 40 frames in 400 ms,
+  which is exactly the expected 100 frames per second.
+- Learned: `ringbuf` 0.5 has no `push_overwrite` on a split producer. The
+  hand-off queue therefore drops the newest packet when full. That is
+  acceptable because the queue holds 320 ms and the callback empties it every
+  few milliseconds, so it can only fill when the device has already stopped.
+  The jitter buffer, not this queue, decides what is too late.
+- Added: T-050 and T-051 for choosing devices. The user asked for it. System
+  defaults work today.
+- Next: M4 sessions, so two instances can actually talk.

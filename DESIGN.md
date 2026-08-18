@@ -190,11 +190,19 @@ One text field does two jobs.
 
 ## 7. Microphone safety
 
-The hot microphone is the main risk of this product. Five controls address it.
+The hot microphone is the main risk of this product.
 
-1. **Open chirp.** A short 2-tone chirp plays locally when your microphone
-   opens. A lower chirp plays when it closes. This cannot be disabled.
-2. **Menu bar state.** The icon is filled and shows the live slot numbers.
+**There is no tone when the microphone opens or closes.** An intercom that
+beeps every time somebody speaks is a worse intercom, and the product is built
+on the idea that talking should feel like turning your head. Opening a
+microphone stays seamless. The controls below carry the job instead, and they
+are all silent and visible.
+
+1. **Menu bar state.** The icon is filled and shows the live slot numbers. This
+   is the primary signal and it is always on screen.
+2. **The macOS microphone indicator.** The input stream is opened only when it
+   might be used, never for the life of the process. The system indicator
+   therefore means something.
 3. **Mute.** `⌃⌥⌘M` forces the microphone off. Sessions stay open. Members see
    you as muted.
 4. **Do not disturb.** Refuses incoming session opens. Contacts see `DND`.
@@ -202,7 +210,11 @@ The hot microphone is the main risk of this product. Five controls address it.
    session open then needs one keypress from you.
 
 An idle timer also applies. If nobody in a session speaks for 10 minutes, the
-session closes and both sides chirp.
+session closes.
+
+One sound remains: a short falling tone when the **audio devices fail**. That
+is the one case the interface cannot cover, because a user whose microphone
+never opened would otherwise talk into nothing.
 
 ## 8. Command line
 

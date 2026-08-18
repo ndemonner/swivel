@@ -68,27 +68,39 @@ before you touch it.
 - [x] **T-027** Path type reporting, `DIR` against `RLY`, from `Connection::paths`
 - [x] **T-028** Audio datagram header encode and decode
   - Accept: unit test for wrap-around of both counters.
-- [ ] **T-029** Datagram send path with drop-on-full behaviour
+- [x] **T-029** Datagram send path with drop-on-full behaviour
   - Accept: `send_datagram` errors increment a counter, never block.
   - Note: released back to open. It belongs with the encoder thread, T-042.
 - [x] **T-030** Datagram receive task, route to the peer slot by `remote_id`
 
 ## M3 — Audio
 
-- [ ] **T-040** Device enumeration, selection, and 48 kHz preference
+- [x] **T-040** Device enumeration, selection, and 48 kHz preference
   - Accept: a device without 48 kHz support is reported, not crashed on.
-- [ ] **T-041** Input stream, downmix to mono, SPSC ring push
+- [x] **T-041** Input stream, downmix to mono, SPSC ring push
   - Accept: no allocation in the callback. Check with a debug allocator hook.
-- [ ] **T-042** Encoder thread, 480 sample frames, one encode for all members
-- [ ] **T-043** Fixed peer slot array with preallocated decoders
-- [ ] **T-044** Output stream, decode, mix, soft limit, upmix
-- [ ] **T-045** Adaptive jitter buffer per ARCHITECTURE.md §5.4
+- [x] **T-042** Encoder thread, 480 sample frames, one encode for all members
+- [x] **T-043** Fixed peer slot array with preallocated decoders
+- [x] **T-044** Output stream, decode, mix, soft limit, upmix
+- [x] **T-045** Adaptive jitter buffer per ARCHITECTURE.md §5.4
   - Accept: unit tests for growth, for the delayed shrink, and for reorder.
-- [ ] **T-046** Packet loss concealment and in-band FEC recovery
-- [ ] **T-047** Open and close chirps, mixed into the local output only
+- [x] **T-046** Packet loss concealment and in-band FEC recovery
+- [x] **T-047** Fault tone, mixed into the local output only
+  - Note: there is deliberately no tone when the microphone opens or closes.
+    Opening a microphone must feel seamless. See DESIGN.md §7.
 - [ ] **T-048** Input and output level meters for the roster
 - [ ] **T-049** Device change handling. Rebuild streams when the default device
   changes.
+- [ ] **T-050** Choose the input and output device, rather than always using the
+  system default
+  - Accept: `walkie devices` lists them. `walkie devices --in <n> --out <n>`
+    sets them.
+  - Accept: the choice is stored in the `settings` table and survives a restart.
+  - Accept: a stored device that has gone away falls back to the system default
+    and says so, rather than failing to start.
+- [ ] **T-051** Device submenu in the menu bar, with a tick against the device in
+  use
+  - Accept: changing a device rebuilds the stream without dropping the session.
 
 ## M4 — Sessions
 
@@ -125,7 +137,7 @@ before you touch it.
 
 - [x] **T-100** `walkie key`, with `--copy`
 - [x] **T-101** `walkie add`, `list`, `rm`, `slot`, `approve`, `block`
-- [ ] **T-102** `walkie doctor`: devices, sample rates, permission, relay, RTT
+- [x] **T-102** `walkie doctor`: devices, sample rates, permission, relay, RTT
 - [ ] **T-103** `walkie doctor --loopback` mouth-to-ear measurement
 - [ ] **T-104** `walkie doctor --tune` suggested settings
 - [x] **T-105** `walkie tui` headless mode for two-process tests

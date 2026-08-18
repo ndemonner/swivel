@@ -101,7 +101,7 @@ fn run() -> Result<()> {
         Some(Command::Slot { who, slot }) => cli::set_slot(&who, slot),
         Some(Command::Approve { who, name }) => cli::approve(&who, name.as_deref()),
         Some(Command::Block { who }) => cli::block(&who),
-        Some(Command::Doctor { .. }) => todo!("T-102: check the local machine"),
+        Some(Command::Doctor { loopback, tune }) => cli::doctor::run(loopback, tune),
         Some(Command::Tui) => cli::tui::run(),
     }
 }
