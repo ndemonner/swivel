@@ -16,6 +16,8 @@ mod net;
 mod session;
 mod state;
 mod store;
+#[cfg(target_os = "macos")]
+mod ui;
 
 use clap::{Parser, Subcommand};
 
@@ -74,6 +76,23 @@ enum Command {
     },
     /// Run without the menu bar. Used for two-process tests.
     Tui,
+    /// Draw the panel to a PNG and exit.
+    ///
+    /// A terminal without the screen recording permission captures the desktop
+    /// with every window missing, so this is the reliable way to look at the
+    /// interface.
+    #[cfg(target_os = "macos")]
+    Snapshot {
+        /// Where to write the image.
+        #[arg(long, default_value = "walkie-panel.png")]
+        out: std::path::PathBuf,
+        /// Fill the roster with every state worth looking at.
+        #[arg(long)]
+        demo: bool,
+        /// Draw the demo roster with a live session.
+        #[arg(long)]
+        live: bool,
+    },
 }
 
 fn main() {
@@ -94,7 +113,7 @@ fn run() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        None => todo!("T-070: run the menu bar application"),
+        None => ui::app_runner::run(),
         Some(Command::Key { copy }) => cli::key(copy),
         Some(Command::Add { ticket, name }) => cli::add(&ticket, name.as_deref()),
         Some(Command::List) => cli::list(),
@@ -104,5 +123,7 @@ fn run() -> Result<()> {
         Some(Command::Block { who }) => cli::block(&who),
         Some(Command::Doctor { loopback, tune }) => cli::doctor::run(loopback, tune),
         Some(Command::Tui) => cli::tui::run(),
+        #[cfg(target_os = "macos")]
+        Some(Command::Snapshot { out, demo, live }) => ui::snapshot::run(&out, demo, live),
     }
 }

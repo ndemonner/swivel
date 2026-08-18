@@ -124,6 +124,7 @@ fn render(state: &UiState) -> String {
     let relay = if state.online { "online" } else { "offline" };
     let mic = match state.mic {
         crate::state::MicState::Closed => "closed",
+        crate::state::MicState::Armed => "open, not sending",
         crate::state::MicState::Live => "LIVE",
         crate::state::MicState::Muted => "muted",
     };

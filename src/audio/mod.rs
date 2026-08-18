@@ -129,6 +129,11 @@ pub struct Engine {
     /// The report from the last device open. Used by `walkie doctor`.
     pub report: Arc<std::sync::Mutex<Option<DeviceReport>>>,
     state: Arc<std::sync::atomic::AtomicU8>,
+    /// True while the input device is open, whether or not it is transmitting.
+    ///
+    /// `state` cannot answer this. An armed but silent microphone still reports
+    /// `Listening`, and the difference is exactly what the idle timer needs.
+    armed: Arc<AtomicBool>,
 }
 
 /// What the engine found when it opened the devices.
@@ -151,6 +156,7 @@ impl Engine {
         let chirps = Arc::new(ChirpPlayer::new());
         let report = Arc::new(std::sync::Mutex::new(None));
         let state = Arc::new(std::sync::atomic::AtomicU8::new(EngineState::Idle as u8));
+        let armed = Arc::new(AtomicBool::new(false));
 
         let estimators = Arc::new(std::sync::Mutex::new(
             (0..MAX_PEERS).map(|_| Estimator::new()).collect::<Vec<_>>(),
@@ -167,6 +173,7 @@ impl Engine {
             let report = report.clone();
             let capture_probe = capture_probe.clone();
             let state = state.clone();
+            let armed = armed.clone();
 
             std::thread::Builder::new()
                 .name("walkie-audio".into())
@@ -181,6 +188,7 @@ impl Engine {
                             report,
                             capture_probe,
                             state,
+                            armed,
                         },
                     );
                 })
@@ -210,6 +218,7 @@ impl Engine {
             chirps,
             report,
             state,
+            armed,
         }))
     }
 
@@ -231,9 +240,14 @@ impl Engine {
         let _ = self.commands.send(Command::Transmit(on));
     }
 
-    /// True when the microphone is open.
+    /// True when the microphone is transmitting.
     pub fn transmitting(&self) -> bool {
         self.capture.transmitting.load(Ordering::Relaxed)
+    }
+
+    /// True while the input device is open, transmitting or not.
+    pub fn armed(&self) -> bool {
+        self.armed.load(Ordering::Acquire)
     }
 
     /// Plays a confirmation tone locally.
@@ -384,6 +398,7 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
         report,
         capture_probe,
         state,
+        armed,
     } = ctx;
 
     // The shared capture state outlives any single device open, so its counters
@@ -435,6 +450,7 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
                             *guard = build_report(&input_summary, output_report.as_ref());
                         }
                         microphone = Some(mic);
+                        armed.store(true, Ordering::Release);
                     }
                     Err(e) => {
                         warn!("cannot open the microphone: {e}");
@@ -450,6 +466,7 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
                     warn!("transmit was requested before the microphone was armed");
                     if let Ok((mic, _)) = open_microphone(&shared, tx.clone()) {
                         microphone = Some(mic);
+                        armed.store(true, Ordering::Release);
                     }
                 }
 
@@ -471,6 +488,7 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
                 if let Some(mic) = microphone.take() {
                     mic.close();
                 }
+                armed.store(false, Ordering::Release);
                 state.store(
                     if speaker.is_some() {
                         EngineState::Listening as u8
@@ -488,6 +506,7 @@ fn audio_thread(commands: crossbeam_channel::Receiver<Command>, ctx: ThreadConte
                 if let Some(mic) = microphone.take() {
                     mic.close();
                 }
+                armed.store(false, Ordering::Release);
                 slots.clear();
                 drop(speaker);
                 state.store(EngineState::Idle as u8, Ordering::Release);
@@ -506,6 +525,7 @@ struct ThreadContext {
     report: Arc<std::sync::Mutex<Option<DeviceReport>>>,
     capture_probe: Arc<std::sync::Mutex<Option<Arc<capture::CaptureShared>>>>,
     state: Arc<std::sync::atomic::AtomicU8>,
+    armed: Arc<AtomicBool>,
 }
 
 /// The microphone while it is open.

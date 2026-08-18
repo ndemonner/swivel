@@ -110,8 +110,21 @@ WALKIE_DB=/tmp/walkie-b.db cargo run -- tui &
 # add each to the other, confirm presence goes online
 ```
 
-If the task touches the user interface, run the application and look at it.
-Do not claim a visual task is done without seeing it.
+If the task touches the user interface, **look at it**. Do not claim a visual
+task is done without seeing it.
+
+```bash
+cargo run -- snapshot --demo --out /tmp/panel.png        # every state
+cargo run -- snapshot --demo --live --out /tmp/live.png  # a live session
+```
+
+`walkie snapshot` renders the panel from inside the process and writes a PNG.
+Use it rather than `screencapture`. A terminal without the screen recording
+permission captures the desktop with every window missing, and the result looks
+like the application failed to draw when it drew correctly.
+
+`WALKIE_PANEL_ON_START=1 cargo run` opens the panel on launch, for the cases a
+snapshot cannot show.
 
 ## 6. Commit
 

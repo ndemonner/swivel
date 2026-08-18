@@ -63,9 +63,15 @@ pub struct KnockView {
 /// What the local microphone is doing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MicState {
-    /// Closed. Nothing is transmitted.
+    /// The input device is closed. Nothing is captured.
     #[default]
     Closed,
+    /// The input device is open but nothing is transmitted.
+    ///
+    /// This is the state after the panel opens and before a contact is chosen.
+    /// It is shown rather than hidden, because an open input device is exactly
+    /// the thing a user is entitled to know about.
+    Armed,
     /// Open to at least one peer.
     Live,
     /// Forced off by the user, while a session is open.
