@@ -24,15 +24,15 @@ before you touch it.
 
 ## M0 — Skeleton
 
-- [ ] **T-001** Cargo project, layout, `.gitignore`, `rust-toolchain.toml`
+- [~] **T-001** Cargo project, layout, `.gitignore`, `rust-toolchain.toml` — branch task/001-skeleton
   - Accept: the binary is named `walkie`. Accept: edition 2024.
-- [ ] **T-002** Pin and verify dependencies
+- [~] **T-002** Pin and verify dependencies — branch task/001-skeleton
   - Accept: `cargo build` succeeds with no system package installed.
   - Accept: libopus compiles from source through `audiopus_sys`.
-- [ ] **T-003** `config.rs` with every tunable constant in one place
+- [~] **T-003** `config.rs` with every tunable constant in one place — branch task/001-skeleton
   - Accept: sample rate, frame size, buffer frames, bitrate, jitter bounds,
     `MAX_PEERS`, ALPN, backoff table.
-- [ ] **T-004** Error type and logging setup
+- [~] **T-004** Error type and logging setup — branch task/001-skeleton
   - Accept: `tracing` to stderr, `WALKIE_LOG` env filter, no logging in
     real-time callbacks.
 
