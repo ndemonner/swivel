@@ -216,7 +216,11 @@ before you touch it.
     self-signed certificate on the release machine keeps the identity stable.
   - Accept: `scripts/build-release.sh` signs with the certificate when it is
     present and falls back to ad-hoc with a warning when it is not.
-- [~] **T-139** Team releases through CI — branch task/139-ci-release
+- [!] **T-139** Team releases through CI
+  - Blocked: the implementation is merged, but the three repository secrets
+    need a repository admin, which wtachau is not on ndemonner/swivel. Run
+    the `gh secret set` commands that `make-signing-cert.sh` prints, then cut
+    a release through CI and mark this done.
   - Four people must be able to release. Copying the signing key and the
     certificate to four laptops means four theft targets and no revocation,
     so the build moves to GitHub Actions instead. The two secrets live once,
