@@ -166,7 +166,9 @@ before you touch it.
 - [ ] **T-112** Release profile: `lto = "fat"`, `codegen-units = 1`, `panic` stays
   `unwind` because the audio callbacks must not abort the process
 - [ ] **T-113** README with a two-minute quick start
-- [ ] **T-114** Universal binary for Apple Silicon and Intel
+- [x] **T-114** Universal binary for Apple Silicon and Intel
+  - The release script writes `./swivel` in the repository root, joined with
+    `lipo` and signed afterwards, because `lipo` discards signatures.
 
 ## M9 — Verification
 
