@@ -123,8 +123,7 @@ before you touch it.
 - [x] **T-062** `SessionClose`, empty-set teardown, and the 10 minute idle timer
 - [x] **T-063** Mute, do-not-disturb, and per-contact `auto_open`
 - [x] **T-064** `TalkState` speaking indicator with a voice activity gate
-- [~] **T-135** Engine-owned session membership for the receive slots — branch
-  task/135-engine-owned-membership
+- [x] **T-135** Engine-owned session membership for the receive slots
   - Bug: the hub of a three-person session hears only the last member added.
     `add_member` arms on every press, `arm` installs a fresh empty `SlotTable`,
     and only the new member is re-activated. The other members' datagrams are
@@ -136,6 +135,18 @@ before you touch it.
     for both remote peers.
   - Accept: the manual re-activation loops in `set_device` and
     `on_session_open` are gone, not duplicated.
+- [ ] **T-136** A redundant `arm` must not rebuild the audio path
+  - Every `arm` while already talking tears down and rebuilds the whole path,
+    so each membership change gives every member an audible hiccup and a
+    burst of queue overruns while the new table waits for the audio thread.
+  - With T-135 the engine repopulates every fresh table itself, so the old
+    reason for the caller-side swap is gone. An `arm` that changes nothing
+    should do nothing.
+  - Accept: adding a third member does not interrupt audio from the first.
+  - Accept: the `overrun` counter stays at zero across a digit press while
+    talking.
+  - Care: `arm` is also the path that applies a changed echo cancellation
+    setting. "Changes nothing" must compare that too. See ARCHITECTURE.md §5.
 
 ## M5 — User interface
 
