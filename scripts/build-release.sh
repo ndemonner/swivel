@@ -50,11 +50,21 @@ fi
 echo "==> signing"
 # `lipo` discards signatures, so this has to happen last.
 #
-# Ad-hoc, because a friend is not going to install a certificate. The signature
-# gives macOS something stable to remember the microphone grant against. The
-# hash changes on every build, so each new version asks once more. B-002 tracks
-# using a stable self-signed certificate.
-codesign --force --sign - --timestamp=none "$OUT"
+# The stable identity from make-signing-cert.sh is preferred. macOS remembers
+# the microphone grant against the signing identity, so with the certificate an
+# update keeps the grant. Ad-hoc is the fallback: it still works, but its
+# identity is the hash of the binary, so each new version asks once more.
+IDENTITY="${SWIVEL_SIGN_IDENTITY:-swivel release}"
+if security find-identity -v -p codesigning 2>/dev/null | grep -Fq "$IDENTITY"; then
+  # The explicit identifier keeps the identity stable even if the file is
+  # renamed. It matches CFBundleIdentifier in Info.plist.
+  codesign --force --sign "$IDENTITY" --identifier dev.motor.swivel \
+    --timestamp=none "$OUT"
+else
+  echo "    no \"$IDENTITY\" certificate. Signing ad-hoc, so this update will"
+  echo "    re-ask for the microphone. Run ./scripts/make-signing-cert.sh once."
+  codesign --force --sign - --identifier dev.motor.swivel --timestamp=none "$OUT"
+fi
 codesign --verify --verbose=1 "$OUT" 2>&1 | sed 's/^/    /'
 
 SIZE=$(du -h "$OUT" | cut -f1)

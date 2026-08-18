@@ -86,6 +86,18 @@ enum Command {
         #[arg(long)]
         tune: bool,
     },
+    /// Update swivel to the latest release.
+    Update {
+        /// Report whether an update exists, without installing it.
+        #[arg(long)]
+        check: bool,
+    },
+    /// Create the release signing key. Maintainer only.
+    #[command(hide = true)]
+    ReleaseKeygen,
+    /// Sign a release artifact with the release key. Maintainer only.
+    #[command(hide = true)]
+    ReleaseSign { file: std::path::PathBuf },
     /// Run without the menu bar. Used for two-process tests.
     Tui,
     /// Draw the panel to a PNG and exit.
@@ -139,6 +151,9 @@ fn run() -> Result<()> {
             reset,
         }) => cli::devices(input.as_deref(), output.as_deref(), reset),
         Some(Command::Doctor { loopback, tune }) => cli::doctor::run(loopback, tune),
+        Some(Command::Update { check }) => cli::update::update(check),
+        Some(Command::ReleaseKeygen) => cli::update::release_keygen(),
+        Some(Command::ReleaseSign { file }) => cli::update::release_sign(&file),
         Some(Command::Tui) => cli::tui::run(),
         #[cfg(target_os = "macos")]
         Some(Command::Snapshot { out, demo, live }) => ui::snapshot::run(&out, demo, live),
