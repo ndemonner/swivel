@@ -123,6 +123,19 @@ before you touch it.
 - [x] **T-062** `SessionClose`, empty-set teardown, and the 10 minute idle timer
 - [x] **T-063** Mute, do-not-disturb, and per-contact `auto_open`
 - [x] **T-064** `TalkState` speaking indicator with a voice activity gate
+- [~] **T-135** Engine-owned session membership for the receive slots — branch
+  task/135-engine-owned-membership
+  - Bug: the hub of a three-person session hears only the last member added.
+    `add_member` arms on every press, `arm` installs a fresh empty `SlotTable`,
+    and only the new member is re-activated. The other members' datagrams are
+    dropped in `deliver` because they no longer own a slot.
+  - Fix: the engine keeps the desired member set and repopulates every fresh
+    table from it inside `swap_slots`, so no `arm`/`disarm`/`set_devices`
+    caller carries a re-activation duty.
+  - Accept: with three instances meshed, `played` rises on all three machines
+    for both remote peers.
+  - Accept: the manual re-activation loops in `set_device` and
+    `on_session_open` are gone, not duplicated.
 
 ## M5 — User interface
 
