@@ -177,11 +177,12 @@ pub const UPDATE_REPO: &str = "ndemonner/swivel";
 
 /// The ed25519 public key that every release artifact must be signed with.
 ///
-/// The matching private key lives only on the maintainer's machine, created by
-/// `swivel release-keygen` and used by `scripts/release.sh`. An update whose
+/// The matching private key is created by `swivel release-keygen` on the
+/// repository admin's machine. It is held as the `RELEASE_SIGNING_KEY`
+/// repository secret and used by the release workflow. An update whose
 /// signature does not verify against this key is refused, whatever TLS said.
 pub const RELEASE_PUBKEY_HEX: &str =
-    "ab213fcd4d5e9990eba3c1989766ea2110e37fb005ef0b93b90f251ece54d912";
+    "3a3c31423dca8fc8af672075e0714d0c5b7b8530a27c00a46802083793ef2a7d";
 
 // ---------------------------------------------------------------------------
 // User interface
