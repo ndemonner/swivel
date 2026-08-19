@@ -52,7 +52,7 @@ Two reports from the same list are already covered:
       cache. The first release after this change is still slow.
   - Accept: a push to `main` runs clippy and the tests.
 
-- [ ] **T-141** Tick the audio device in use
+- [~] **T-141** Tick the audio device in use — branch task/141-device-tick
   - The device submenu lists every device and marks none of them, so there is
     no way to see which one is in use. "Cancel echo" carries a tick already,
     which makes the missing ones look like a fault.
