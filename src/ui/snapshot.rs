@@ -24,20 +24,28 @@ use crate::state::{KnockView, MicState, PathKind, PeerView, UiState};
 use super::panel::Panel;
 
 /// Renders the panel and writes it to `path`.
-pub fn run(path: &Path, demo: bool, live: bool) -> Result<()> {
+///
+/// `menu` prints the menu bar menu as text instead. See
+/// `statusitem::describe_menu`.
+pub fn run(path: &Path, demo: bool, live: bool, menu: bool) -> Result<()> {
     let mtm = MainThreadMarker::new()
         .ok_or_else(|| Error::Other(anyhow::anyhow!("AppKit needs the main thread")))?;
 
     let app = NSApplication::sharedApplication(mtm);
     app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
 
-    let panel = Panel::new(mtm, Rc::new(|_action| {}));
-
     let state = if demo {
         demo_state(live)
     } else {
         real_state()?
     };
+
+    if menu {
+        print!("{}", super::statusitem::describe_menu(mtm, &state));
+        return Ok(());
+    }
+
+    let panel = Panel::new(mtm, Rc::new(|_action| {}));
 
     panel.set_state(state);
     // Showing lays out the subviews and sizes the panel to its content. A panel
@@ -76,6 +84,13 @@ fn real_state() -> Result<UiState> {
 
     let my_id = me.endpoint_id();
 
+    // The settings the menu ticks are read from. Without them `--menu` would
+    // report the defaults on every machine and prove nothing.
+    let echo_cancelling = store
+        .setting(crate::store::SETTING_ECHO_CANCEL)?
+        .map(|v| v != "off")
+        .unwrap_or(true);
+
     Ok(UiState {
         my_name: me.name.clone(),
         my_id: Some(my_id),
@@ -83,6 +98,9 @@ fn real_state() -> Result<UiState> {
         key_copied: false,
         online: false,
         peers,
+        echo_cancelling,
+        input_device: store.setting(crate::store::SETTING_INPUT_DEVICE)?,
+        output_device: store.setting(crate::store::SETTING_OUTPUT_DEVICE)?,
         ..Default::default()
     })
 }
@@ -146,6 +164,8 @@ fn demo_state(live: bool) -> UiState {
         my_key: crate::store::ticket::Ticket::new(id(9), "nick").encode(),
         key_copied: false,
         echo_cancelling: true,
+        input_device: None,
+        output_device: None,
         online: true,
         peers,
         knocks: vec![KnockView {

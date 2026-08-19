@@ -118,6 +118,14 @@ cargo run -- snapshot --demo --out /tmp/panel.png        # every state
 cargo run -- snapshot --demo --live --out /tmp/live.png  # a live session
 ```
 
+The menu bar menu is an `NSMenu`, not a view, so no renderer can draw it. Print
+it instead:
+
+```bash
+cargo run -- snapshot --menu           # the real settings on this machine
+cargo run -- snapshot --demo --menu    # the demo state
+```
+
 `swivel snapshot` renders the panel from inside the process and writes a PNG.
 Use it rather than `screencapture`. A terminal without the screen recording
 permission captures the desktop with every window missing, and the result looks

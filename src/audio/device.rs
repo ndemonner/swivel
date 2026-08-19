@@ -245,3 +245,61 @@ fn supports_48k(device: &Device, direction: Direction) -> bool {
         })
         .unwrap_or(false)
 }
+
+/// The device name a direction really opens.
+///
+/// `preferred` is the stored choice. A stored name that the host no longer
+/// offers falls back to the system default, because `choose` falls back the
+/// same way. The menu tick has to agree with the audio path, or it reports a
+/// device that is not in use.
+pub fn in_use(
+    preferred: Option<&str>,
+    offered: &[String],
+    default: Option<&str>,
+) -> Option<String> {
+    match preferred {
+        Some(name) if offered.iter().any(|n| n == name) => Some(name.to_string()),
+        _ => default.map(str::to_string),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn offered() -> Vec<String> {
+        vec!["MacBook Pro Microphone".into(), "Scarlett Solo".into()]
+    }
+
+    #[test]
+    fn a_stored_device_that_is_here_is_the_one_in_use() {
+        let name = in_use(
+            Some("Scarlett Solo"),
+            &offered(),
+            Some("MacBook Pro Microphone"),
+        );
+        assert_eq!(name.as_deref(), Some("Scarlett Solo"));
+    }
+
+    #[test]
+    fn a_stored_device_that_went_away_falls_back_to_the_default() {
+        let name = in_use(
+            Some("Blue Yeti"),
+            &offered(),
+            Some("MacBook Pro Microphone"),
+        );
+        assert_eq!(name.as_deref(), Some("MacBook Pro Microphone"));
+    }
+
+    #[test]
+    fn no_stored_device_is_the_system_default() {
+        let name = in_use(None, &offered(), Some("MacBook Pro Microphone"));
+        assert_eq!(name.as_deref(), Some("MacBook Pro Microphone"));
+    }
+
+    #[test]
+    fn a_machine_with_no_device_at_all_has_none_in_use() {
+        assert_eq!(in_use(None, &[], None), None);
+        assert_eq!(in_use(Some("Blue Yeti"), &[], None), None);
+    }
+}

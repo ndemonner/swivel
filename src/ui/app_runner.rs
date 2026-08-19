@@ -340,7 +340,7 @@ impl Ui {
                     self.show_panel();
                 }
             }
-            MenuAction::ShowMenu => self.status.show_menu(self.state.load().echo_cancelling),
+            MenuAction::ShowMenu => self.status.show_menu(&self.state.load()),
             MenuAction::OpenPanel => self.show_panel(),
             MenuAction::ToggleMute => self.send(Command::ToggleMute),
             MenuAction::ToggleDnd => self.send(Command::ToggleDnd),
