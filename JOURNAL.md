@@ -314,3 +314,50 @@ Newest entries at the bottom. Keep entries short. Record surprises.
   collaborators with push access. Push access is the whole release ACL now.
   B-009 covers the deeper problem: one embedded key with no rollover means
   every future rotation breaks every installed binary the same way.
+
+## 2026-08-19 — defect triage, and T-140 the CI cache
+
+- Did: read eleven defect reports from use, checked each one against the code,
+  and filed the ten that are still open as M10 in TODO.md, easiest first.
+  Then fixed T-140.
+- Of the eleven, one was already done: "hears some members and not others" was
+  T-135, merged in `0b5357b`. T-136 is the rest of it and stays in M4.
+- What the reading turned up, so the next agent does not repeat it:
+  - The panel roster bug is two faults with one symptom. `draw` groups
+    `state.peers` and ignores the filter; `content_height` measures the
+    filtered set. The field also keeps its text when the panel is dismissed by
+    a click elsewhere. T-142.
+  - ⌘V cannot work today. An accessory application has no menu bar, so nothing
+    carries the standard editing key equivalents. T-143.
+  - `build_devices_menu` never calls `setState`, and `UiState` does not carry
+    the device names, so the menu cannot tick anything. T-141.
+  - `UiState::fault` is written by `on_session_open` and then erased by the
+    next `refresh_ui`, which sets `fault: None` unconditionally. Any notice
+    put there disappears within two seconds. T-147.
+  - The likely cause of "audio stops for everyone": `Command::Arm` drops the
+    speaker, then `start_talking` moves the queue consumers into the mixer. If
+    the voice unit refuses to start, the consumers go with the failed mixer,
+    the function returns an error, and the arm handler only logs it. The
+    machine is left with no speaker at all. A voice unit is most likely to
+    refuse moments after the previous one was torn down, which is what a
+    reconnect does. T-148.
+- T-140: the release build had no cache. The trap is that adding one to
+  `release.yml` alone does nothing. A cache is readable from the ref that
+  wrote it or from the default branch, and `release.yml` runs on a tag, so
+  each tag would write a cache no later tag could read. The fix needs a
+  workflow on `main` to write it: `ci.yml` checks format, clippy, and tests on
+  every push and pull request, and on `main` it also builds both release
+  targets. `release.yml` restores with `save-if: false`.
+- Learned: `shared-key` in `Swatinem/rust-cache` replaces the job-based part of
+  the key, so two different workflows can share one cache. Checked in the
+  action's `src/config.ts`, not assumed. The key also carries the runner OS and
+  architecture and a hash of `Cargo.lock`, `rust-toolchain.toml`, and
+  `.cargo/config.toml`, all of which match between the two workflows.
+- Not verified end to end: whether the cache is actually reused is only
+  visible when the next release runs. `ci.yml` has to run on `main` once first,
+  because a tag can only read a cache the default branch already wrote. The
+  first release after this change is therefore still slow.
+- Measured locally for scale: with every dependency already built, the final
+  crate alone takes 3 m 09 s at `lto = "fat"`, and a release does that twice.
+  The dependency compile it now skips is the larger half again.
+- Next: T-141 and T-142. Both are small and both are visible to the user.

@@ -592,6 +592,23 @@ who can change the workflow file or the secrets can ship a release, so
 repository admin is the release trust boundary. `release.sh --local` keeps the
 single-machine path as a fallback for the key holder when CI is down.
 
+**Why there is a second workflow.** `.github/workflows/ci.yml` runs on `main`
+and on a pull request. It checks the format, runs clippy and the tests, and on
+`main` it also builds both release targets. The build is what fills the cargo
+cache, and the cache is what makes a release fast: a release compiles every
+dependency twice, once per architecture, and it builds the vendored Opus source
+with CMake as well.
+
+A GitHub Actions cache can only be read from the ref that wrote it or from the
+default branch. `release.yml` runs on a tag, so a cache it writes is unreachable
+from the next tag. Only a workflow on `main` can write a cache a release can
+read. `release.yml` therefore restores and never saves, with `save-if: false`,
+and both workflows carry the same `shared-key` so the keys agree.
+
+The second reason for `ci.yml` is the CMake 4 failure in T-139. A dependency
+that compiles C can break on the runner while it builds on every laptop, and a
+release is the worst moment to find that out.
+
 ## 10. Testing
 
 1. **Unit.** Ticket round trip, slot assignment, jitter buffer decisions, wire

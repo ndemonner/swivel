@@ -34,7 +34,7 @@ Two reports from the same list are already covered:
   still rebuilds the audio path and interrupts everyone.
 - T-136 stays where it is, in M4.
 
-- [~] **T-140** Cache the build in CI — branch task/140-ci-cache
+- [x] **T-140** Cache the build in CI
   - A release build starts from an empty `target/` every time. It compiles
     every dependency twice, once per architecture, and it builds the vendored
     Opus source with CMake as well. A release takes far longer than it should.
@@ -47,6 +47,9 @@ Two reports from the same list are already covered:
     T-139 cost a whole release cycle.
   - Accept: a second release with no dependency change reuses the cache and is
     measurably faster than the first.
+    - Not checked yet. It can only be seen when a release runs, and `ci.yml`
+      must run on `main` once first, because a tag reads the default branch's
+      cache. The first release after this change is still slow.
   - Accept: a push to `main` runs clippy and the tests.
 
 - [ ] **T-141** Tick the audio device in use

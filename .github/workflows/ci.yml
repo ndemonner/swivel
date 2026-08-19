@@ -1,0 +1,65 @@
+# Checks every push to `main` and every pull request.
+#
+# It also exists to make a release fast. A GitHub Actions cache can be read by
+# a run on the same ref, or by any run, from the default branch. `release.yml`
+# runs on a tag, so a cache written by a tag run is of no use to the next tag.
+# Only a workflow on `main` can write a cache that a release can read, and that
+# is this one. See ARCHITECTURE.md §9.5.
+#
+# The second reason is the CMake 4 failure in T-139. A dependency that compiles
+# C can break on the runner while it builds on every laptop, and a release is
+# the worst moment to find out.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A second push replaces the first. Nothing here needs the older answer.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # The same image as the release, so the cache it writes fits the cache the
+    # release reads.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache the registry and the build directory
+        uses: Swatinem/rust-cache@v2
+        with:
+          # The same key in `release.yml`. Without it the key carries the job
+          # name, and the release would never find this cache.
+          shared-key: macos-15
+          # A pull request reads the cache and does not write one. A branch
+          # cache cannot be read from `main` anyway, and writing one only
+          # crowds out the entry the release needs.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Check
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test
+
+      # The release builds both architectures with `lto = "fat"`. Building them
+      # here is what puts the release dependencies in the cache. A pull request
+      # skips it: the check above is the answer it is waiting for.
+      - name: Build both release targets
+        if: github.ref == 'refs/heads/main'
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
