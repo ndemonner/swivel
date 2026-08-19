@@ -361,3 +361,29 @@ Newest entries at the bottom. Keep entries short. Record surprises.
   crate alone takes 3 m 09 s at `lto = "fat"`, and a release does that twice.
   The dependency compile it now skips is the larger half again.
 - Next: T-141 and T-142. Both are small and both are visible to the user.
+
+## 2026-08-19 — T-141 tick the audio device in use
+
+- Did: `UiState` carries the chosen input and output device names, and
+  `build_devices_menu` ticks the matching item. Added `swivel snapshot --menu`
+  to check it.
+- The tick follows the device the audio path really opens, not the stored
+  name. `device::in_use` repeats the fallback in `device::choose`: a stored
+  device the host no longer offers ticks the system default. A tick on a
+  device that is not open is worse than no tick at all.
+- "Use the system defaults" is ticked only when neither direction is stored.
+  The item resets both, so one stored device makes the tick untrue.
+- Surprise: there was no way to look at this. LOOP.md §5 says to look at a
+  visual change, and `swivel snapshot` renders the panel, but the menu is an
+  `NSMenu` and not a view, so no renderer can draw it. `snapshot --menu` walks
+  the real `NSMenu` and prints each item's title and `state()`. That is the
+  only honest check short of a screenshot, which needs a permission the
+  terminal does not have. LOOP.md §5 now says so.
+- `real_state` in `snapshot.rs` was building `UiState` with
+  `..Default::default()`, so the printed menu would have reported the defaults
+  on every machine. It now reads the device and echo settings from the store.
+- Removed the unused `StatusItem::menu` field. The menu is built fresh on
+  every show, so the one built in `new` was written and never read. It also
+  enumerated every audio device at startup, which T-070 budgets 500 ms for.
+- Next: T-142. The panel roster is two faults with one symptom, and the notes
+  in TODO.md name all three places.
