@@ -25,6 +25,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Read the cache that `ci.yml` wrote on `main`. A tag run cannot write a
+      # cache the next tag can read, so it only reads. Every dependency, and
+      # the vendored Opus source that CMake builds, then comes back rather than
+      # being compiled again for both architectures.
+      - name: Restore the cached build
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: macos-15
+          save-if: false
+
       - name: Refuse a tag that does not match Cargo.toml
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
