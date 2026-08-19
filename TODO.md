@@ -52,7 +52,7 @@ Two reports from the same list are already covered:
       cache. The first release after this change is still slow.
   - Accept: a push to `main` runs clippy and the tests.
 
-- [~] **T-141** Tick the audio device in use — branch task/141-device-tick
+- [x] **T-141** Tick the audio device in use
   - The device submenu lists every device and marks none of them, so there is
     no way to see which one is in use. "Cancel echo" carries a tick already,
     which makes the missing ones look like a fault.
@@ -62,6 +62,7 @@ Two reports from the same list are already covered:
     matching item. Tick "Use the system defaults" when no device is stored.
   - Accept: the menu ticks exactly one microphone and one speaker.
   - Accept: choosing another device moves the tick.
+  - Checked with `swivel snapshot --menu`, which prints the real menu.
 
 - [ ] **T-142** The panel shows the wrong people after it is opened again
   - Two faults with one symptom. Opening and closing the panel shows a
