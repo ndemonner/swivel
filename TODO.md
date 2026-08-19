@@ -22,6 +22,144 @@ before you touch it.
 
 ---
 
+## M10 — Reported defects (highest priority)
+
+Reported from use on 2026-08-19. Work these before any other milestone. They
+are ordered by how quickly they can be fixed, easiest first.
+
+Two reports from the same list are already covered:
+
+- "People in a multi-person session hear some members and not others" was
+  T-135, merged in `0b5357b`. T-136 is the remainder of it: a redundant `arm`
+  still rebuilds the audio path and interrupts everyone.
+- T-136 stays where it is, in M4.
+
+- [~] **T-140** Cache the build in CI — branch task/140-ci-cache
+  - A release build starts from an empty `target/` every time. It compiles
+    every dependency twice, once per architecture, and it builds the vendored
+    Opus source with CMake as well. A release takes far longer than it should.
+  - `release.yml` runs on a tag. A run can only restore a cache written by its
+    own ref or by the default branch, and no workflow runs on the default
+    branch today, so a cache step in `release.yml` alone would never hit.
+  - Fix: add a workflow on `main` that builds, tests, and writes the cache.
+    Add the restore to `release.yml`. The `main` workflow also catches a
+    toolchain fault before a release, which is what the CMake 4 failure in
+    T-139 cost a whole release cycle.
+  - Accept: a second release with no dependency change reuses the cache and is
+    measurably faster than the first.
+  - Accept: a push to `main` runs clippy and the tests.
+
+- [ ] **T-141** Tick the audio device in use
+  - The device submenu lists every device and marks none of them, so there is
+    no way to see which one is in use. "Cancel echo" carries a tick already,
+    which makes the missing ones look like a fault.
+  - `build_devices_menu` never calls `setState`. It also does not know the
+    current choice, because `UiState` does not carry the device names.
+  - Fix: carry the input and output device names in `UiState`, and tick the
+    matching item. Tick "Use the system defaults" when no device is stored.
+  - Accept: the menu ticks exactly one microphone and one speaker.
+  - Accept: choosing another device moves the tick.
+
+- [ ] **T-142** The panel shows the wrong people after it is opened again
+  - Two faults with one symptom. Opening and closing the panel shows a
+    different set of contacts each time.
+  - `RosterView::draw` groups `state.peers` and ignores the filter, but
+    `content_height` measures the filtered set. A panel sized for one row then
+    draws nine, and the rows past the height are dropped by the `break`.
+  - The search field keeps its text when the panel is dismissed by a click
+    elsewhere, so the stale filter applies on the next open.
+  - `Panel::show` also sizes the panel from the previous snapshot, because
+    `set_state` runs after `show`.
+  - Fix: draw the filtered set, clear the field when the panel hides, and
+    publish the state before the panel measures itself.
+  - Accept: a roster of nine contacts shows nine rows on every open.
+  - Accept: a search, then a dismiss, then an open, shows every contact.
+
+- [ ] **T-143** Paste into the search field with ⌘V
+  - ⌘V does nothing in the search field, so a key must be typed by hand. A key
+    is 63 characters. This makes adding a contact through the panel unusable.
+  - An accessory application has no menu bar, so no Edit menu carries the
+    standard key equivalents, and `NSTextView` never receives `paste:`.
+  - Fix: handle the editing key equivalents on the panel and send them to the
+    first responder.
+  - Accept: ⌘V, ⌘C, ⌘X, ⌘A, and ⌘Z work in the search field.
+  - Accept: a pasted `sv1` key is added with Return, as a typed one is.
+
+- [ ] **T-144** Click a slot to open or close a conversation
+  - A digit works. A click does nothing but move focus. Every row looks like a
+    control and behaves like a label.
+  - `RosterView::mouseDown:` only takes first responder. The drawing code
+    computes row positions and throws them away.
+  - Fix: record the rectangle of each drawn row, and act on a click inside one.
+    A click on a row is the same action as its digit.
+  - Accept: a click on a row starts a conversation with that contact.
+  - Accept: a click on a live row takes that contact out of the conversation.
+  - Accept: a contact with no slot can still be reached by a click.
+
+- [ ] **T-145** Leave a conversation from the panel
+  - The only ways out are the `0` key, ⌃⌥⌘⎋, and a menu item. Nothing in the
+    panel says so, so quitting looks like the only way to leave.
+  - Fix: draw a visible control in the live session summary that ends the
+    session, and name the key beside it.
+  - Accept: the panel shows how to leave whenever a session is live.
+  - Accept: leaving a three-person session leaves the other two talking.
+
+- [ ] **T-146** Run detached by default
+  - `./swivel` holds the terminal. The program is a menu bar application, so
+    the terminal it started from is of no further use.
+  - Fix: the plain `swivel` command starts the application detached and
+    returns. Add `--foreground` for the current behaviour, which the logs and
+    the two-process tests need.
+  - Care: the log output must go somewhere a user can find. Care: a second
+    instance must not start silently beside the first.
+  - Accept: `./swivel` returns to the prompt with the icon in the menu bar.
+  - Accept: `swivel --foreground` behaves as `swivel` does today.
+  - Accept: `SWIVEL_LOG=debug ./swivel` still records its log.
+
+- [ ] **T-147** Ask before a stranger joins a conversation
+  - A member can add somebody this machine does not know. Today that arrives
+    as a silent `SessionOpen` from a stranger, which `on_session_open` drops
+    with a debug line. The user never learns that somebody tried to talk.
+  - A known contact set to knock is no better: the notice is written to
+    `UiState::fault`, and the next `refresh_ui` sets `fault: None`, so it is
+    erased within two seconds.
+  - Fix: hold the request as a real record, the way a knock is held, and show
+    it in the panel with accept and refuse. Give `fault` a lifetime, or drop
+    it for a field that survives a refresh.
+  - Accept: adding a stranger to a conversation raises a request on their
+    machine that waits for an answer.
+  - Accept: the request survives a refresh and stays until it is answered.
+
+- [ ] **T-148** Audio stops for everyone after a reconnect
+  - After a disconnect and a reconnect, nobody can be heard until the process
+    is restarted.
+  - Suspected cause: `Command::Arm` drops the speaker, then calls
+    `start_talking`. The voice unit path moves the queue consumers into the
+    mixer, so a failure there loses them and returns an error. The arm handler
+    only logs it. The machine is then left with no speaker at all, which is
+    exactly "audio stopped for everyone". A voice unit is most likely to
+    refuse to start moments after the previous one was torn down, which is
+    what a reconnect does.
+  - T-136 is the other half: a redundant `arm` should not rebuild the path at
+    all, so the failure window should not be entered.
+  - Fix: the audio path must always end with an open speaker. A failed
+    conversation start falls back to listening, and it says so.
+  - Accept: a voice unit that refuses to start leaves the speaker open.
+  - Accept: two machines that disconnect and reconnect five times still hear
+    each other, with `played` rising on both.
+
+- [ ] **T-149** The received audio is quiet and rough
+  - The far end is too quiet and does not sound clean.
+  - Places to measure before changing anything: `PEER_GAIN` at 0.8 with no
+    make-up gain; the voice unit runs with automatic gain control off; the
+    microphone is downmixed by an average, which loses 6 dB on a device that
+    carries the voice in one channel of two; the Catmull-Rom converter runs on
+    any device that is not at 48 kHz.
+  - Fix: measure first. Record a known tone through the whole path and report
+    the level at each stage. Change one thing at a time.
+  - Accept: a measured end-to-end level within 3 dB of the input.
+  - Accept: the numbers and the decision are written in ARCHITECTURE.md §5.
+
 ## M0 — Skeleton
 
 - [x] **T-001** Cargo project, layout, `.gitignore`, `rust-toolchain.toml`
