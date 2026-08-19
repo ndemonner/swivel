@@ -116,6 +116,9 @@ enum Command {
         /// Draw the demo roster with a live session.
         #[arg(long)]
         live: bool,
+        /// Print the menu bar menu as text, rather than drawing the panel.
+        #[arg(long)]
+        menu: bool,
     },
 }
 
@@ -156,6 +159,11 @@ fn run() -> Result<()> {
         Some(Command::ReleaseSign { file }) => cli::update::release_sign(&file),
         Some(Command::Tui) => cli::tui::run(),
         #[cfg(target_os = "macos")]
-        Some(Command::Snapshot { out, demo, live }) => ui::snapshot::run(&out, demo, live),
+        Some(Command::Snapshot {
+            out,
+            demo,
+            live,
+            menu,
+        }) => ui::snapshot::run(&out, demo, live, menu),
     }
 }

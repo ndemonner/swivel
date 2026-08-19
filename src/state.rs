@@ -97,6 +97,14 @@ pub struct UiState {
     /// Echo cancellation is wanted. Without it a loudspeaker makes the far end
     /// hear themselves.
     pub echo_cancelling: bool,
+    /// The chosen input device. `None` follows the system default.
+    ///
+    /// The menu needs this to tick the device in use. It is the stored choice,
+    /// not the open device: the devices are shut whenever nobody is talking,
+    /// and the menu must still say which one a session would open.
+    pub input_device: Option<String>,
+    /// The chosen output device. `None` follows the system default.
+    pub output_device: Option<String>,
     /// Slots in the live session, in the order they were added.
     pub live_slots: Vec<u8>,
     /// Set when something went wrong that the user must see.

@@ -11,8 +11,8 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Sel};
 use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSControlStateValueOff, NSControlStateValueOn, NSEventMask, NSEventType, NSMenu, NSMenuItem,
-    NSStatusBar, NSStatusItem, NSVariableStatusItemLength,
+    NSControlStateValue, NSControlStateValueOff, NSControlStateValueOn, NSEventMask, NSEventType,
+    NSMenu, NSMenuItem, NSStatusBar, NSStatusItem, NSVariableStatusItemLength,
 };
 use objc2_foundation::{MainThreadMarker, NSObject, NSObjectProtocol, NSPoint, NSString};
 
@@ -149,6 +149,55 @@ define_class!(
     }
 );
 
+/// Renders the whole menu as text, ticks included.
+///
+/// `swivel snapshot --menu` prints this. A menu is an `NSMenu`, not a view, so
+/// the panel renderer cannot draw it and a screenshot needs a permission the
+/// terminal usually does not have. Reading the real `NSMenuItem` states is the
+/// way to check that exactly one microphone and one speaker carry a tick.
+pub fn describe_menu(mtm: MainThreadMarker, state: &UiState) -> String {
+    let target = MenuTarget::new(mtm, Rc::new(|_action| {}));
+    let menu = StatusItem::build_menu(mtm, &target, state);
+    let mut out = String::new();
+    describe_into(&menu, 0, &mut out);
+    out
+}
+
+fn describe_into(menu: &NSMenu, depth: usize, out: &mut String) {
+    let indent = "  ".repeat(depth);
+
+    for index in 0..menu.numberOfItems() {
+        let Some(item) = menu.itemAtIndex(index) else {
+            continue;
+        };
+
+        if item.isSeparatorItem() {
+            out.push_str(&format!("{indent}--\n"));
+            continue;
+        }
+
+        let mark = if item.state() == NSControlStateValueOn {
+            "[x]"
+        } else {
+            "[ ]"
+        };
+        out.push_str(&format!("{indent}{mark} {}\n", item.title()));
+
+        if let Some(submenu) = item.submenu() {
+            describe_into(&submenu, depth + 1, out);
+        }
+    }
+}
+
+/// The tick state for a menu item.
+fn tick(on: bool) -> NSControlStateValue {
+    if on {
+        NSControlStateValueOn
+    } else {
+        NSControlStateValueOff
+    }
+}
+
 /// Reads the tag from a menu item that sent an action.
 fn tag_of(sender: Option<&AnyObject>) -> Option<usize> {
     let item: &NSMenuItem = unsafe { std::mem::transmute(sender?) };
@@ -165,7 +214,6 @@ impl MenuTarget {
 /// The menu bar item and its menu.
 pub struct StatusItem {
     item: Retained<NSStatusItem>,
-    menu: Retained<NSMenu>,
     target: Retained<MenuTarget>,
     /// The last title drawn, so a redraw at 10 Hz does not churn the menu bar.
     last_title: RefCell<String>,
@@ -190,22 +238,20 @@ impl StatusItem {
             button.setFont(Some(&style::mono(11.0)));
         }
 
-        // The menu is rebuilt each time it is shown, because the device list
-        // changes when headphones are plugged in. It is attached only for the
-        // instant it is shown: attaching it permanently would make a left click
-        // open the menu instead of the roster.
-        let menu = Self::build_menu(mtm, &target, true);
-
+        // The menu is built each time it is shown, because the device list
+        // changes when headphones are plugged in, and because the ticks come
+        // from the snapshot of the moment. It is attached only for the instant
+        // it is shown: attaching it permanently would make a left click open
+        // the menu instead of the roster.
         StatusItem {
             item,
-            menu,
             target,
             last_title: RefCell::new(String::new()),
             mtm,
         }
     }
 
-    fn build_menu(mtm: MainThreadMarker, target: &MenuTarget, echo_on: bool) -> Retained<NSMenu> {
+    fn build_menu(mtm: MainThreadMarker, target: &MenuTarget, state: &UiState) -> Retained<NSMenu> {
         let menu = NSMenu::new(mtm);
 
         // `None` marks a separator.
@@ -248,7 +294,7 @@ impl StatusItem {
             )
         };
         menu.setSubmenu_forItem(
-            Some(&Self::build_devices_menu(mtm, target, echo_on)),
+            Some(&Self::build_devices_menu(mtm, target, state)),
             &devices,
         );
         menu.insertItem_atIndex(&devices, (menu.numberOfItems() - 2).max(0));
@@ -261,9 +307,9 @@ impl StatusItem {
     /// The menu is attached, clicked, and detached again. `NSStatusItem` has no
     /// other way to show a menu on demand, and leaving it attached would make
     /// every left click open the menu instead of the roster.
-    pub fn show_menu(&self, echo_on: bool) {
+    pub fn show_menu(&self, state: &UiState) {
         // Rebuild first. A device list from a minute ago is often wrong.
-        let fresh = Self::build_menu(self.mtm, &self.target, echo_on);
+        let fresh = Self::build_menu(self.mtm, &self.target, state);
         self.item.setMenu(Some(&fresh));
         if let Some(button) = self.item.button(self.mtm) {
             unsafe { button.performClick(None) };
@@ -275,10 +321,14 @@ impl StatusItem {
     ///
     /// The system default is offered first, so a user who changed a device by
     /// accident has an obvious way back.
+    ///
+    /// Exactly one microphone and one speaker carry a tick. The tick follows
+    /// the device the audio path really opens, so a stored device that has
+    /// gone away ticks the system default instead of nothing.
     fn build_devices_menu(
         mtm: MainThreadMarker,
         target: &MenuTarget,
-        echo_on: bool,
+        state: &UiState,
     ) -> Retained<NSMenu> {
         use crate::audio::device::{self, Direction};
 
@@ -295,11 +345,7 @@ impl StatusItem {
         unsafe { echo.setTarget(Some(target)) };
         // A tick means it is on. Without cancellation, using a loudspeaker
         // makes the far end hear themselves.
-        echo.setState(if echo_on {
-            NSControlStateValueOn
-        } else {
-            NSControlStateValueOff
-        });
+        echo.setState(tick(state.echo_cancelling));
         menu.addItem(&echo);
         menu.addItem(&NSMenuItem::separatorItem(mtm));
 
@@ -312,11 +358,26 @@ impl StatusItem {
             )
         };
         unsafe { reset.setTarget(Some(target)) };
+        // The item returns both directions to the system, so one stored device
+        // is enough to make the tick untrue.
+        reset.setState(tick(
+            state.input_device.is_none() && state.output_device.is_none(),
+        ));
         menu.addItem(&reset);
 
-        for (direction, action, label) in [
-            (Direction::Input, sel!(chooseInput:), "Microphone"),
-            (Direction::Output, sel!(chooseOutput:), "Speaker"),
+        for (direction, action, label, preferred) in [
+            (
+                Direction::Input,
+                sel!(chooseInput:),
+                "Microphone",
+                state.input_device.as_deref(),
+            ),
+            (
+                Direction::Output,
+                sel!(chooseOutput:),
+                "Speaker",
+                state.output_device.as_deref(),
+            ),
         ] {
             menu.addItem(&NSMenuItem::separatorItem(mtm));
 
@@ -331,7 +392,11 @@ impl StatusItem {
             header.setEnabled(false);
             menu.addItem(&header);
 
-            for (index, name) in device::names(direction).into_iter().enumerate() {
+            let names = device::names(direction);
+            let default = device::default_name(direction);
+            let in_use = device::in_use(preferred, &names, default.as_deref());
+
+            for (index, name) in names.iter().enumerate() {
                 let item = unsafe {
                     NSMenuItem::initWithTitle_action_keyEquivalent(
                         NSMenuItem::alloc(mtm),
@@ -344,6 +409,7 @@ impl StatusItem {
                     item.setTarget(Some(target));
                     item.setTag(index as isize);
                 }
+                item.setState(tick(in_use.as_deref() == Some(name.as_str())));
                 menu.addItem(&item);
             }
         }

@@ -972,6 +972,8 @@ impl App {
             status.get().iter().any(|relay| relay.is_connected())
         };
 
+        let devices = self.devices();
+
         self.state.store(UiState {
             my_name: self.identity.name.clone(),
             my_id: Some(self.me),
@@ -983,6 +985,8 @@ impl App {
             mic,
             dnd,
             echo_cancelling: self.echo_cancelling(),
+            input_device: devices.input,
+            output_device: devices.output,
             live_slots,
             fault: None,
             audio: self.audio_counters(),
