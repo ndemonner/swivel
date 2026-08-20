@@ -277,8 +277,8 @@ impl Ui {
         // A borderless panel in an accessory application does not get key
         // focus unless the application is activated first.
         app.activate();
-        self.panel.show(self.status.anchor());
-        self.panel.set_state((*self.state.load()).clone());
+        self.panel
+            .show(self.status.anchor(), (*self.state.load()).clone());
     }
 
     fn on_roster_action(&self, action: Action) {

@@ -16,7 +16,7 @@ use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::{NSEvent, NSTextAlignment, NSView};
 use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize};
 
-use crate::state::{MicState, PathKind, UiState};
+use crate::state::{MicState, PathKind, PeerView, UiState};
 
 use super::style;
 
@@ -102,6 +102,75 @@ define_class!(
     }
 );
 
+/// The y at which the roster starts, below the header and the field.
+const BODY_TOP: f64 = style::MARGIN + style::HEADER_HEIGHT + style::FIELD_HEIGHT + 16.0;
+
+/// The peers the filter lets through.
+///
+/// A `sv1` key in the field is not a search, so it hides nobody. The field does
+/// two jobs and this is where they part.
+fn visible_peers<'a>(peers: &'a [PeerView], filter: &str) -> Vec<&'a PeerView> {
+    if filter.is_empty() || filter.starts_with(crate::config::TICKET_PREFIX) {
+        return peers.iter().collect();
+    }
+
+    peers
+        .iter()
+        .filter(|p| {
+            p.name.to_lowercase().contains(filter)
+                || p.slot.is_some_and(|s| s.to_string() == filter)
+        })
+        .collect()
+}
+
+/// The roster in the order it is drawn: a section label and its rows, with the
+/// empty sections left out.
+///
+/// `draw` and `content_height_for` both read this. A group cannot be measured
+/// as one set and drawn as another.
+fn groups<'a>(shown: &[&'a PeerView]) -> Vec<(&'static str, Vec<&'a PeerView>)> {
+    let pick = |keep: fn(&PeerView) -> bool| -> Vec<&'a PeerView> {
+        shown.iter().copied().filter(|p| keep(p)).collect()
+    };
+
+    [
+        ("live", pick(|p| p.live)),
+        ("online", pick(|p| p.online && !p.live)),
+        ("offline", pick(|p| !p.online)),
+    ]
+    .into_iter()
+    .filter(|(_, group)| !group.is_empty())
+    .collect()
+}
+
+/// The height a roster needs, so the panel can size itself to it.
+///
+/// It must match `draw` step for step. A mismatch shows as a gap at the bottom
+/// or a clipped last row.
+fn content_height_for(state: &UiState, filter: &str) -> f64 {
+    let mut height = BODY_TOP;
+
+    if !state.knocks.is_empty() {
+        height += 14.0 + state.knocks.len().min(3) as f64 * (style::ROW_HEIGHT - 4.0) + 10.0;
+    }
+
+    let shown = visible_peers(&state.peers, filter);
+
+    if shown.is_empty() {
+        if !filter.is_empty() && !state.peers.is_empty() {
+            return height + 40.0 + style::MARGIN;
+        }
+        // The empty state carries the key box.
+        return height + 12.0 + 26.0 + style::KEY_BOX_HEIGHT + 14.0 + 26.0 + style::MARGIN;
+    }
+
+    for (_, group) in groups(&shown) {
+        height += 14.0 + group.len() as f64 * style::ROW_HEIGHT + 8.0;
+    }
+
+    height + style::MARGIN
+}
+
 impl RosterView {
     pub fn new(mtm: MainThreadMarker, actions: Rc<dyn Fn(Action)>) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(RosterIvars {
@@ -131,27 +200,6 @@ impl RosterView {
         }
         *self.ivars().filter.borrow_mut() = trimmed;
         self.setNeedsDisplay(true);
-    }
-
-    /// The peers the filter lets through.
-    ///
-    /// A `sv1` key in the field is not a search, so it hides nobody. The field
-    /// does two jobs and this is where they part.
-    fn visible_peers<'a>(&self, state: &'a UiState) -> Vec<&'a crate::state::PeerView> {
-        let filter = self.ivars().filter.borrow();
-
-        if filter.is_empty() || filter.starts_with(crate::config::TICKET_PREFIX) {
-            return state.peers.iter().collect();
-        }
-
-        state
-            .peers
-            .iter()
-            .filter(|p| {
-                p.name.to_lowercase().contains(filter.as_str())
-                    || p.slot.is_some_and(|s| s.to_string() == *filter)
-            })
-            .collect()
     }
 
     fn send(&self, action: Action) {
@@ -222,19 +270,17 @@ impl RosterView {
             y += 10.0;
         }
 
-        let live: Vec<_> = state.peers.iter().filter(|p| p.live).collect();
-        let online: Vec<_> = state.peers.iter().filter(|p| p.online && !p.live).collect();
-        let offline: Vec<_> = state.peers.iter().filter(|p| !p.online).collect();
+        // The filtered set, not every peer. The panel is sized to what the
+        // filter lets through, so drawing the whole roster into it puts rows
+        // past the bottom edge, where the height check below drops them.
+        let shown = visible_peers(&state.peers, &self.ivars().filter.borrow());
 
-        if state.peers.is_empty() {
+        if shown.is_empty() {
             self.draw_empty(&state, x, y, width);
             return;
         }
 
-        for (label, group) in [("live", live), ("online", online), ("offline", offline)] {
-            if group.is_empty() {
-                continue;
-            }
+        for (label, group) in groups(&shown) {
             style::section(label, NSPoint::new(x, y), width);
             y += 14.0;
 
@@ -250,40 +296,8 @@ impl RosterView {
     }
 
     /// The height this roster needs, so the panel can size itself to it.
-    ///
-    /// It must match `draw` step for step. A mismatch shows as a gap at the
-    /// bottom or a clipped last row.
     pub fn content_height(&self) -> f64 {
-        let state = self.ivars().state.borrow();
-
-        let mut height = style::MARGIN + style::HEADER_HEIGHT + style::FIELD_HEIGHT + 16.0;
-
-        if !state.knocks.is_empty() {
-            height += 14.0 + state.knocks.len().min(3) as f64 * (style::ROW_HEIGHT - 4.0) + 10.0;
-        }
-
-        let shown = self.visible_peers(&state);
-
-        if shown.is_empty() {
-            if !self.ivars().filter.borrow().is_empty() && !state.peers.is_empty() {
-                return height + 40.0 + style::MARGIN;
-            }
-            // The empty state carries the key box.
-            return height + 12.0 + 26.0 + style::KEY_BOX_HEIGHT + 14.0 + 26.0 + style::MARGIN;
-        }
-
-        let live = shown.iter().filter(|p| p.live).count();
-        let online = shown.iter().filter(|p| p.online && !p.live).count();
-        let offline = shown.iter().filter(|p| !p.online).count();
-
-        for group in [live, online, offline] {
-            if group == 0 {
-                continue;
-            }
-            height += 14.0 + group as f64 * style::ROW_HEIGHT + 8.0;
-        }
-
-        height + style::MARGIN
+        content_height_for(&self.ivars().state.borrow(), &self.ivars().filter.borrow())
     }
 
     fn draw_header(&self, state: &UiState, x: f64, y: f64, width: f64) -> f64 {
@@ -607,5 +621,117 @@ impl RosterView {
                 &style::control(),
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::PathKind;
+
+    fn peer(n: u8, slot: u8, name: &str) -> PeerView {
+        PeerView {
+            endpoint_id: iroh::SecretKey::from_bytes(&[n; 32]).public(),
+            slot: Some(slot),
+            name: name.to_string(),
+            online: false,
+            rtt_ms: None,
+            path: PathKind::Unknown,
+            dnd: false,
+            muted: false,
+            live: false,
+            speaking: false,
+        }
+    }
+
+    /// Nine offline contacts, which is one group of nine rows.
+    fn nine() -> UiState {
+        let names = [
+            "Maggie", "Will", "Ada", "Tomas", "David", "Priya", "Jun", "Lena", "Omar",
+        ];
+        UiState {
+            peers: names
+                .iter()
+                .enumerate()
+                .map(|(i, name)| peer(i as u8 + 1, i as u8 + 1, name))
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    fn rows(state: &UiState, filter: &str) -> usize {
+        groups(&visible_peers(&state.peers, filter))
+            .iter()
+            .map(|(_, group)| group.len())
+            .sum()
+    }
+
+    #[test]
+    fn an_empty_filter_shows_everyone() {
+        assert_eq!(rows(&nine(), ""), 9);
+    }
+
+    #[test]
+    fn a_key_in_the_field_hides_nobody() {
+        // The field searches and adds. A pasted key is not a search.
+        let key = format!("{}abc", crate::config::TICKET_PREFIX);
+        assert_eq!(rows(&nine(), &key), 9);
+    }
+
+    #[test]
+    fn a_filter_matches_a_name_or_a_slot() {
+        assert_eq!(rows(&nine(), "ada"), 1);
+        assert_eq!(rows(&nine(), "4"), 1);
+        assert_eq!(rows(&nine(), "zz"), 0);
+    }
+
+    #[test]
+    fn the_height_measures_the_rows_that_are_drawn() {
+        // The reported defect: the height measured the filtered set and the
+        // drawing used every peer, so a panel sized for one row drew nine and
+        // dropped the rest at the bottom edge.
+        let state = nine();
+        let one_group =
+            |n: usize| BODY_TOP + 14.0 + n as f64 * style::ROW_HEIGHT + 8.0 + style::MARGIN;
+
+        assert_eq!(content_height_for(&state, ""), one_group(rows(&state, "")));
+        assert_eq!(
+            content_height_for(&state, "ada"),
+            one_group(rows(&state, "ada"))
+        );
+    }
+
+    #[test]
+    fn each_group_is_measured_once() {
+        let mut state = nine();
+        state.peers[0].online = true;
+        state.peers[1].online = true;
+        state.peers[1].live = true;
+
+        let shown = visible_peers(&state.peers, "");
+        let by_group = groups(&shown);
+        assert_eq!(
+            by_group.iter().map(|(label, _)| *label).collect::<Vec<_>>(),
+            vec!["live", "online", "offline"]
+        );
+        assert_eq!(by_group.iter().map(|(_, g)| g.len()).sum::<usize>(), 9);
+
+        let expected: f64 = BODY_TOP
+            + by_group
+                .iter()
+                .map(|(_, g)| 14.0 + g.len() as f64 * style::ROW_HEIGHT + 8.0)
+                .sum::<f64>()
+            + style::MARGIN;
+        assert_eq!(content_height_for(&state, ""), expected);
+    }
+
+    #[test]
+    fn a_search_that_matches_nobody_keeps_the_panel_small() {
+        let state = nine();
+        assert!(content_height_for(&state, "zz") < content_height_for(&state, ""));
+        // An empty roster shows the key box instead, which is taller than the
+        // "nobody matches that" line.
+        let empty = UiState::default();
+        assert!(content_height_for(&empty, "") > content_height_for(&state, "zz"));
     }
 }

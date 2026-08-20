@@ -64,7 +64,7 @@ Two reports from the same list are already covered:
   - Accept: choosing another device moves the tick.
   - Checked with `swivel snapshot --menu`, which prints the real menu.
 
-- [~] **T-142** The panel shows the wrong people after it is opened again — branch task/142-panel-roster
+- [x] **T-142** The panel shows the wrong people after it is opened again
   - Two faults with one symptom. Opening and closing the panel shows a
     different set of contacts each time.
   - `RosterView::draw` groups `state.peers` and ignores the filter, but
@@ -78,6 +78,9 @@ Two reports from the same list are already covered:
     publish the state before the panel measures itself.
   - Accept: a roster of nine contacts shows nine rows on every open.
   - Accept: a search, then a dismiss, then an open, shows every contact.
+  - Checked with `swivel snapshot --demo --search will`, which draws the
+    filtered roster. `--search` was added for this, because nothing could put
+    text in the field.
 
 - [ ] **T-143** Paste into the search field with ⌘V
   - ⌘V does nothing in the search field, so a key must be typed by hand. A key
@@ -163,6 +166,18 @@ Two reports from the same list are already covered:
     the level at each stage. Change one thing at a time.
   - Accept: a measured end-to-end level within 3 dB of the input.
   - Accept: the numbers and the decision are written in ARCHITECTURE.md §5.
+
+- [ ] **T-150** The panel stays open when you click another application
+  - `DESIGN.md` §6.2 says the panel closes on `Esc` or on focus loss. It
+    closes on `Esc` only. `Panel::new` sets `setHidesOnDeactivate(false)`, and
+    there is no window delegate, so nothing closes it when focus goes.
+  - A floating panel left over another application looks like a fault, and it
+    is one more thing to dismiss by hand.
+  - Fix: close the panel when it stops being the key window. Check the menu
+    bar menu first: showing an `NSMenu` may take key focus, and closing the
+    panel under the menu the user just opened would be worse than leaving it.
+  - Accept: a click in another application closes the panel.
+  - Accept: opening the menu bar menu does not close the panel.
 
 ## M0 — Skeleton
 

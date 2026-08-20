@@ -119,6 +119,9 @@ enum Command {
         /// Print the menu bar menu as text, rather than drawing the panel.
         #[arg(long)]
         menu: bool,
+        /// Fill the search field, to draw the roster that filter leaves.
+        #[arg(long, default_value = "")]
+        search: String,
     },
 }
 
@@ -164,6 +167,7 @@ fn run() -> Result<()> {
             demo,
             live,
             menu,
-        }) => ui::snapshot::run(&out, demo, live, menu),
+            search,
+        }) => ui::snapshot::run(&out, demo, live, menu, &search),
     }
 }

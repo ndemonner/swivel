@@ -116,6 +116,7 @@ task is done without seeing it.
 ```bash
 cargo run -- snapshot --demo --out /tmp/panel.png        # every state
 cargo run -- snapshot --demo --live --out /tmp/live.png  # a live session
+cargo run -- snapshot --demo --search ada                # the roster a search leaves
 ```
 
 The menu bar menu is an `NSMenu`, not a view, so no renderer can draw it. Print
