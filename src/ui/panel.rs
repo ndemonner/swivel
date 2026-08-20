@@ -1,8 +1,10 @@
 //! The floating panel.
 //!
 //! It appears under the menu bar icon, takes keyboard focus, and closes on
-//! escape or on focus loss. It is a panel rather than a window so it can float
-//! above other applications without a title bar or a Dock entry.
+//! escape. `DESIGN.md` §6.2 also asks it to close on focus loss, which it does
+//! not do yet: `setHidesOnDeactivate(false)` keeps it up. T-150 covers that.
+//! It is a panel rather than a window so it can float above other applications
+//! without a title bar or a Dock entry.
 
 use std::rc::Rc;
 
@@ -273,7 +275,12 @@ impl Panel {
     /// item sits in an overflow area gets an off-screen point for the life of
     /// the process. Either way the panel would be placed where nobody can see
     /// it, so the result is always clamped to the visible screen.
-    pub fn show(&self, anchor: Option<NSPoint>) {
+    pub fn show(&self, anchor: Option<NSPoint>, state: UiState) {
+        // The state comes first. The panel measures itself from what it is
+        // about to draw, so a state published after the show would size the
+        // panel to the previous roster.
+        self.set_state(state);
+
         let visible = self.visible_frame();
         self.resize_to_content(visible);
 
@@ -322,13 +329,23 @@ impl Panel {
             return;
         }
 
+        // The panel hangs from its top edge, under the menu bar icon. A window
+        // origin is its bottom left, so growing it from the stored origin would
+        // walk the top edge up the screen on every resize.
+        let origin = NSPoint::new(
+            current.origin.x,
+            current.origin.y + current.size.height - wanted,
+        );
+
         self.window.setFrame_display(
             NSRect::new(
-                current.origin,
+                origin,
                 NSSize::new(style::PANEL_WIDTH + style::SHADOW_OFFSET, wanted),
             ),
             false,
         );
+        // The new height can push the bottom of the panel off the screen.
+        self.window.setFrameOrigin(self.clamp(origin, screen));
         self.layout(wanted);
     }
 
@@ -375,24 +392,29 @@ impl Panel {
 
     pub fn hide(&self) {
         self.window.orderOut(None);
+        // A filter left in the field applies to the next open, and the roster
+        // then shows a set the user did not ask for. The panel opens clean.
+        self.clear_field();
+        self.roster.set_filter("");
     }
 
     pub fn is_visible(&self) -> bool {
         self.window.isVisible()
     }
 
-    pub fn toggle(&self, anchor: Option<NSPoint>) {
-        if self.is_visible() {
-            self.hide();
-        } else {
-            self.show(anchor);
-        }
-    }
-
     /// Publishes a new snapshot to the roster, and applies the current filter.
+    ///
+    /// A visible panel also resizes. The roster it holds changes while it is
+    /// open: a contact comes online and moves group, or the user clears the
+    /// search. Both change the height the roster needs, and a panel kept at the
+    /// old height drops the rows past its bottom edge.
     pub fn set_state(&self, state: UiState) {
         self.roster.set_filter(&self.field_text());
         self.roster.set_state(state);
+
+        if self.is_visible() {
+            self.resize_to_content(self.visible_frame());
+        }
     }
 
     /// Moves keyboard focus to the search and add field.
@@ -410,7 +432,14 @@ impl Panel {
         self.field.stringValue().to_string()
     }
 
+    /// Puts text in the field, as though it were typed.
+    ///
+    /// `snapshot --search` uses it, so a filtered roster can be looked at.
+    pub fn set_field_text(&self, text: &str) {
+        self.field.setStringValue(&NSString::from_str(text));
+    }
+
     pub fn clear_field(&self) {
-        self.field.setStringValue(&NSString::from_str(""));
+        self.set_field_text("");
     }
 }

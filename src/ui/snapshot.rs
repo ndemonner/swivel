@@ -27,7 +27,11 @@ use super::panel::Panel;
 ///
 /// `menu` prints the menu bar menu as text instead. See
 /// `statusitem::describe_menu`.
-pub fn run(path: &Path, demo: bool, live: bool, menu: bool) -> Result<()> {
+///
+/// `search` fills the search field, which is the only way to look at a filtered
+/// roster. The roster and the panel height are both measured from the filtered
+/// set, and that pair is what T-142 fixed.
+pub fn run(path: &Path, demo: bool, live: bool, menu: bool, search: &str) -> Result<()> {
     let mtm = MainThreadMarker::new()
         .ok_or_else(|| Error::Other(anyhow::anyhow!("AppKit needs the main thread")))?;
 
@@ -46,11 +50,11 @@ pub fn run(path: &Path, demo: bool, live: bool, menu: bool) -> Result<()> {
     }
 
     let panel = Panel::new(mtm, Rc::new(|_action| {}));
+    panel.set_field_text(search);
 
-    panel.set_state(state);
-    // Showing lays out the subviews and sizes the panel to its content. A panel
-    // that was never shown would render at its starting size.
-    panel.show(None);
+    // Showing publishes the state, lays out the subviews, and sizes the panel
+    // to its content. A panel that was never shown renders at its starting size.
+    panel.show(None, state);
     panel.write_png(path)?;
     panel.hide();
 
