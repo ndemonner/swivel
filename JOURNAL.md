@@ -387,3 +387,39 @@ Newest entries at the bottom. Keep entries short. Record surprises.
   enumerated every audio device at startup, which T-070 budgets 500 ms for.
 - Next: T-142. The panel roster is two faults with one symptom, and the notes
   in TODO.md name all three places.
+
+## 2026-08-20 — T-142 the panel roster
+
+- Did: the panel now draws the set it was measured for, and it opens clean.
+  Three faults, one symptom.
+  1. `RosterView::draw` grouped every peer. `content_height` measured the
+     filtered set. A search sized the panel for one row and drew nine.
+  2. `Panel::show` published the state after it measured itself, so every open
+     was sized to the previous roster.
+  3. `hide` left the text in the field, so the last search filtered the next
+     open.
+- The fix that matters is structural, not the three edits. `visible_peers`,
+  `groups`, and `content_height_for` are free functions, and both the drawing
+  and the measurement read the same two. A set can no longer be measured as one
+  thing and drawn as another. Free functions also test off the main thread,
+  which an `NSView` method cannot: `MainThreadMarker::new` returns `None` under
+  the test harness.
+- Also: a visible panel now resizes on `set_state`. The roster changes while it
+  is open, and the panel used to keep the height it opened with. A resize holds
+  the top edge, because a window origin is its bottom left and the panel hangs
+  from the menu bar.
+- Surprise: there was no way to look at a filtered roster. `snapshot --demo`
+  draws the roster, but nothing could put text in the field, and the field is
+  the filter. `snapshot --search <text>` fills it. With the draw reverted by
+  hand, `--demo --search will` reproduced the report exactly: the panel showed
+  "Maggie Henry" and an orphan OFFLINE label. With the fix it shows Will
+  Tachau. T-141 hit the same wall with the menu. If a state cannot be rendered,
+  it cannot be checked, and it will be reported by a user instead.
+- Filed T-150. `DESIGN.md` §6.2 says the panel closes on focus loss. It does
+  not: `setHidesOnDeactivate(false)` keeps it up and there is no window
+  delegate. The T-142 report assumed the behaviour exists.
+- Removed `Panel::toggle`. It was dead, and it duplicated `app_runner` without
+  the disarm request.
+- Adds nothing to the latency budget. Nothing here touches the audio path.
+- Next: T-143. ⌘V needs a key equivalent an accessory application does not
+  get from a menu bar. The notes in TODO.md name the two ways in.
