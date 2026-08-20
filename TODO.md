@@ -164,6 +164,18 @@ Two reports from the same list are already covered:
   - Accept: a measured end-to-end level within 3 dB of the input.
   - Accept: the numbers and the decision are written in ARCHITECTURE.md §5.
 
+- [ ] **T-150** The panel stays open when you click another application
+  - `DESIGN.md` §6.2 says the panel closes on `Esc` or on focus loss. It
+    closes on `Esc` only. `Panel::new` sets `setHidesOnDeactivate(false)`, and
+    there is no window delegate, so nothing closes it when focus goes.
+  - A floating panel left over another application looks like a fault, and it
+    is one more thing to dismiss by hand.
+  - Fix: close the panel when it stops being the key window. Check the menu
+    bar menu first: showing an `NSMenu` may take key focus, and closing the
+    panel under the menu the user just opened would be worse than leaving it.
+  - Accept: a click in another application closes the panel.
+  - Accept: opening the menu bar menu does not close the panel.
+
 ## M0 — Skeleton
 
 - [x] **T-001** Cargo project, layout, `.gitignore`, `rust-toolchain.toml`
