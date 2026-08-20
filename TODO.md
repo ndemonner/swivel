@@ -64,7 +64,7 @@ Two reports from the same list are already covered:
   - Accept: choosing another device moves the tick.
   - Checked with `swivel snapshot --menu`, which prints the real menu.
 
-- [~] **T-142** The panel shows the wrong people after it is opened again — branch task/142-panel-roster
+- [x] **T-142** The panel shows the wrong people after it is opened again
   - Two faults with one symptom. Opening and closing the panel shows a
     different set of contacts each time.
   - `RosterView::draw` groups `state.peers` and ignores the filter, but
@@ -78,6 +78,9 @@ Two reports from the same list are already covered:
     publish the state before the panel measures itself.
   - Accept: a roster of nine contacts shows nine rows on every open.
   - Accept: a search, then a dismiss, then an open, shows every contact.
+  - Checked with `swivel snapshot --demo --search will`, which draws the
+    filtered roster. `--search` was added for this, because nothing could put
+    text in the field.
 
 - [ ] **T-143** Paste into the search field with ⌘V
   - ⌘V does nothing in the search field, so a key must be typed by hand. A key
